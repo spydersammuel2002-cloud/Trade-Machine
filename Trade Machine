@@ -75,26 +75,6 @@ passesButton.MouseButton1Click:Connect(function()
 
 end)
 
-end)
-
---// PASSES BUTTON
-
-local sideButtons = tradeUI:WaitForChild("Side Buttons")
-
-local baseSkinsButton = sideButtons:WaitForChild("BaseSkins")
-
-local passesButton = baseSkinsButton:Clone()
-passesButton.Name = "Passes"
-passesButton.Parent = sideButtons
-
-local txt = passesButton:FindFirstChild("Txt")
-
-if txt then
-	txt.Text = "Passes"
-end
-
-template.Visible = false
-
 --// CONFIRMATION
 local confirmationUI = playerGui:WaitForChild("Confirmation")
 local warningTemplate = confirmationUI:WaitForChild("WarningTemplate")

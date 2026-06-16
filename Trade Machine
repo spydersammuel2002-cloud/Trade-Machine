@@ -20,10 +20,25 @@ local yourFrame = tradeUI:WaitForChild("Your")
 local scrollingFrame = yourFrame:WaitForChild("ScrollingFrame")
 local template = scrollingFrame:WaitForChild("Template")
 
+--// PASSES BUTTON
+
+local sideButtons = tradeUI:WaitForChild("Side Buttons")
+
+local baseSkinsButton = sideButtons:WaitForChild("BaseSkins")
+
+local passesButton = baseSkinsButton:Clone()
+passesButton.Name = "Passes"
+passesButton.Parent = sideButtons
+
+local txt = passesButton:FindFirstChild("Txt")
+
+if txt then
+	txt.Text = "Passes"
+end
+
 local originalSize = passesButton.Size
 
 passesButton.MouseEnter:Connect(function()
-
 	TweenService:Create(
 		passesButton,
 		TweenInfo.new(0.1),
@@ -36,11 +51,9 @@ passesButton.MouseEnter:Connect(function()
 			)
 		}
 	):Play()
-
 end)
 
 passesButton.MouseLeave:Connect(function()
-
 	TweenService:Create(
 		passesButton,
 		TweenInfo.new(0.1),
@@ -48,15 +61,19 @@ passesButton.MouseLeave:Connect(function()
 			Size = originalSize
 		}
 	):Play()
-
 end)
-
-local selectedColor = Color3.fromRGB(81,158,86)
-local normalColor = passesButton.BackgroundColor3
 
 passesButton.MouseButton1Click:Connect(function()
 
-	passesButton.BackgroundColor3 = selectedColor
+	passesButton.BackgroundColor3 = Color3.fromRGB(81,158,86)
+
+	for _,obj in ipairs(scrollingFrame:GetChildren()) do
+		if obj.Name:find("Selection") then
+			obj.Visible = false
+		end
+	end
+
+end)
 
 end)
 

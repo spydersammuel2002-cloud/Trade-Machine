@@ -20,60 +20,7 @@ local yourFrame = tradeUI:WaitForChild("Your")
 local scrollingFrame = yourFrame:WaitForChild("ScrollingFrame")
 local template = scrollingFrame:WaitForChild("Template")
 
---// PASSES BUTTON
-
-local sideButtons = tradeUI:WaitForChild("Side Buttons")
-
-local baseSkinsButton = sideButtons:WaitForChild("BaseSkins")
-
-local passesButton = baseSkinsButton:Clone()
-passesButton.Name = "Passes"
-passesButton.Parent = sideButtons
-
-local txt = passesButton:FindFirstChild("Txt")
-
-if txt then
-	txt.Text = "Passes"
-end
-
-local originalSize = passesButton.Size
-
-passesButton.MouseEnter:Connect(function()
-	TweenService:Create(
-		passesButton,
-		TweenInfo.new(0.1),
-		{
-			Size = UDim2.new(
-				originalSize.X.Scale * 1.1,
-				originalSize.X.Offset * 1.1,
-				originalSize.Y.Scale * 1.1,
-				originalSize.Y.Offset * 1.1
-			)
-		}
-	):Play()
-end)
-
-passesButton.MouseLeave:Connect(function()
-	TweenService:Create(
-		passesButton,
-		TweenInfo.new(0.1),
-		{
-			Size = originalSize
-		}
-	):Play()
-end)
-
-passesButton.MouseButton1Click:Connect(function()
-
-	passesButton.BackgroundColor3 = Color3.fromRGB(81,158,86)
-
-	for _,obj in ipairs(scrollingFrame:GetChildren()) do
-		if obj.Name:find("Selection") then
-			obj.Visible = false
-		end
-	end
-
-end)
+template.Visible = false
 
 --// CONFIRMATION
 local confirmationUI = playerGui:WaitForChild("Confirmation")

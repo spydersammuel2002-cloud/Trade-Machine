@@ -710,16 +710,98 @@ buttonsHolder.Size = UDim2.new(1,-20,0,300)
 local grid = Instance.new("UIGridLayout")
 grid.Parent = buttonsHolder
 
-local function updatePresetVisibility()
-	scrollingFrame.Visible =
-		gearsButton.BackgroundColor3 == requiredColor
+--// PASSES DEBUG + VISIBILITY
+
+local sideButtons = tradeUI:WaitForChild("Side Buttons")
+
+local passesButton =
+	sideButtons:FindFirstChild("Passes")
+
+warn("========== PASSES DEBUG ==========")
+
+for _,obj in ipairs(sideButtons:GetChildren()) do
+	warn("Found Side Button:",obj.Name)
 end
 
-gearsButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
-	updatePresetVisibility()
+if not passesButton then
+	warn("❌ PASSES BUTTON NOT FOUND")
+	warn("Rename the button exactly to 'Passes'")
+else
+	warn("✅ PASSES BUTTON FOUND")
+end
+
+local hiddenButtons = {}
+
+local function setAllSideButtonsGreen()
+
+	for _,obj in ipairs(sideButtons:GetChildren()) do
+
+		if obj:IsA("TextButton")
+			or obj:IsA("ImageButton")
+			or obj:IsA("Frame") then
+
+			pcall(function()
+				obj.BackgroundColor3 = requiredColor
+			end)
+		end
+	end
+end
+
+local function updatePassesMode()
+
+	if not passesButton then
+		return
+	end
+
+	local enabled =
+		passesButton.BackgroundColor3 == requiredColor
+
+	warn("Passes Selected:",enabled)
+	warn("Current Color:",passesButton.BackgroundColor3)
+
+	if enabled then
+
+		playSound("rbxassetid://75311202481026",1)
+
+		setAllSideButtonsGreen()
+
+		for _,button in ipairs(buttonsHolder:GetChildren()) do
+
+			if button:IsA("ImageButton") then
+
+				if button.Visible then
+					hiddenButtons[button] = true
+				end
+
+				button.Visible = false
+			end
+		end
+
+		warn("✅ Preset buttons hidden")
+
+	else
+
+		for button in pairs(hiddenButtons) do
+
+			if button and button.Parent then
+				button.Visible = true
+			end
+		end
+
+		table.clear(hiddenButtons)
+
+		warn("✅ Preset buttons restored")
+	end
+end
+
+passesButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+
+	warn("Passes color changed")
+
+	updatePassesMode()
 end)
 
-updatePresetVisibility()
+updatePassesMode()
 
 grid.CellSize = UDim2.new(0,60,0,60)
 grid.CellPadding = UDim2.new(0,6,0,6)

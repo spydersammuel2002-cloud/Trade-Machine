@@ -21,7 +21,7 @@ local darkPurple = Color3.fromRGB(28, 18, 40)
 local panelDark = Color3.fromRGB(18, 18, 24)
 local softPink = Color3.fromRGB(255, 120, 220)
 
---// TABLES & STATE
+--// STATE
 local adminPanels = {}
 local removedPresets = {}
 local pendingPanel = nil
@@ -37,7 +37,6 @@ local temporaryAcceptEnd = 0
 local notificationCooldown = {}
 local acceptProcessed = false
 
---// KEYBIND
 local keybindListening = false
 local keybind = Enum.KeyCode.F
 
@@ -50,7 +49,14 @@ pcall(function()
     end
 end)
 
---// NOTIFICATION TEMPLATE SETUP (ASYNC)
+--// DYNAMIC TRADE UI REFERENCES
+local tradeUI = nil
+local scrollingFrame = nil
+local sideButtons = nil
+local template = nil
+local passesButton = nil
+
+--// NOTIFICATION TEMPLATE
 local notifTemplate = nil
 task.spawn(function()
     local notificationRoot = playerGui:WaitForChild("Notification")
@@ -134,16 +140,7 @@ local presets = {
 
 --// REFRESH SCROLLING FRAME
 local function refreshScrollingFrame()
-    local tradeRoot = playerGui:FindFirstChild("TradeLiveTrade")
-    if not tradeRoot then return end
-    local tradeUI = tradeRoot:FindFirstChild("TradeLiveTrade")
-    if not tradeUI then return end
-    local yourFrame = tradeUI:FindFirstChild("Your")
-    if not yourFrame then return end
-    local scrollingFrame = yourFrame:FindFirstChild("ScrollingFrame")
-    if not scrollingFrame then return end
-    local sideButtons = tradeUI:FindFirstChild("Side Buttons")
-    if not sideButtons then return end
+    if not scrollingFrame or not sideButtons then return end
     
     local passesBtn = sideButtons:FindFirstChild("Passes")
     local passesActive = passesBtn and passesBtn.BackgroundColor3 == requiredColor
@@ -158,10 +155,8 @@ local function refreshScrollingFrame()
                     item.Visible = true
                 end
             else
-                -- Hide all admin panels if passes is not active
-                if item.Name == "AdminPanel" then
-                    item.Visible = false
-                end
+                -- When passes is NOT active, ALL buttons inside ScrollingFrame should be hidden
+                item.Visible = false
             end
         end
     end
@@ -169,16 +164,10 @@ end
 
 --// CREATE PANEL
 local function createAdminPanel(preset)
-    local tradeRoot = playerGui:FindFirstChild("TradeLiveTrade")
-    if not tradeRoot then return end
-    local tradeUI = tradeRoot:FindFirstChild("TradeLiveTrade")
-    if not tradeUI then return end
-    local yourFrame = tradeUI:FindFirstChild("Your")
-    if not yourFrame then return end
-    local scrollingFrame = yourFrame:FindFirstChild("ScrollingFrame")
-    if not scrollingFrame then return end
-    local template = scrollingFrame:FindFirstChild("Template")
-    if not template then return end
+    if not scrollingFrame or not template then 
+        showNotification("Open a trade first!", Color3.fromRGB(255, 0, 0))
+        return 
+    end
 
     local clone = template:Clone()
     clone.Name = "AdminPanel"
@@ -631,7 +620,7 @@ task.spawn(function()
     end
 end)
 
---// CONFIRMATION UI HOOK (ASYNC)
+--// CONFIRMATION UI HOOK
 task.spawn(function()
     while true do
         local confirmationUI = playerGui:WaitForChild("Confirmation")
@@ -671,18 +660,22 @@ task.spawn(function()
     end
 end)
 
---// TRADE UI HOOK (ASYNC)
+--// TRADE UI HOOK
 task.spawn(function()
     while true do
         local tradeRoot = playerGui:WaitForChild("TradeLiveTrade")
-        local tradeUI = tradeRoot:WaitForChild("TradeLiveTrade")
-        local sideButtons = tradeUI:WaitForChild("Side Buttons")
-        
+        tradeUI = tradeRoot:WaitForChild("TradeLiveTrade")
+        sideButtons = tradeUI:WaitForChild("Side Buttons")
+        local yourFrame = tradeUI:WaitForChild("Your")
+        scrollingFrame = yourFrame:WaitForChild("ScrollingFrame")
+        template = scrollingFrame:WaitForChild("Template")
+        template.Visible = false
+
         local existingPasses = sideButtons:FindFirstChild("Passes")
         if existingPasses then existingPasses:Destroy() end
 
         local baseSkins = sideButtons:WaitForChild("BaseSkins")
-        local passesButton = baseSkins:Clone()
+        passesButton = baseSkins:Clone()
         passesButton.Name = "Passes"
         
         local passesTxt = passesButton:FindFirstChild("Txt", true)
@@ -690,7 +683,7 @@ task.spawn(function()
         
         passesButton.Parent = sideButtons
 
-        -- 1.05x Hover Effect for Passes Button
+        -- 1.05x Hover Effect
         local originalPassesSize = passesButton.Size
         local hoverPassesSize = UDim2.new(originalPassesSize.X.Scale * 1.05, originalPassesSize.X.Offset * 1.05, originalPassesSize.Y.Scale * 1.05, originalPassesSize.Y.Offset * 1.05)
 
@@ -726,38 +719,21 @@ task.spawn(function()
         end
 
         refreshScrollingFrame()
-        tradeUI.AncestryChanged:Wait() -- Wait for trade to close before restarting
+        tradeUI.AncestryChanged:Wait() -- Wait for trade to close
+        
+        -- Clear references
+        tradeUI = nil
+        scrollingFrame = nil
+        sideButtons = nil
+        template = nil
+        passesButton = nil
     end
 end)
 
---// PROCESS ACCEPT & HEARTBEAT LOOP (ASYNC)
+--// HEARTBEAT LOOP (AUTO ACCEPT & PROCESSING)
 task.spawn(function()
     while true do
-        local tradeRoot = playerGui:WaitForChild("TradeLiveTrade")
-        local tradeUI = tradeRoot:WaitForChild("TradeLiveTrade")
-        
-        local readyFrame, readyButton
-
-        local function findGui()
-            local other = tradeUI:FindFirstChild("Other")
-            if not other then return end
-            readyFrame = other:FindFirstChild("Ready")
-            readyButton = other:FindFirstChild("ReadyButton")
-        end
-
-        local function click(button)
-            if not button or not button.Visible or not button.Active then return end
-            pcall(function() button:Activate() end)
-            pcall(function() for _, c in ipairs(getconnections(button.Activated)) do c:Fire() end end)
-            pcall(function() for _, c in ipairs(getconnections(button.MouseButton1Click)) do c:Fire() end end)
-        end
-
-        local hbConn
-        hbConn = RunService.Heartbeat:Connect(function()
-            if not tradeUI or not tradeUI.Parent then
-                if hbConn then hbConn:Disconnect() end
-                return
-            end
+        if tradeUI then
             local other = tradeUI:FindFirstChild("Other")
             if other then
                 local timer = other:FindFirstChild("Timer")
@@ -783,64 +759,57 @@ task.spawn(function()
                 updateToggle()
             end
 
-            if not autoAccept then return end
-            if not readyFrame or not readyButton then findGui() return end
-
-            local other = tradeUI:FindFirstChild("Other")
-            if other then
-                local ready = other:FindFirstChild("Ready")
-                local readyButtonObj = other:FindFirstChild("ReadyButton")
-                if ready and readyButtonObj and readyButtonObj:FindFirstChild("Txt") then
-                    local txt = readyButtonObj.Txt
-                    if ready.Visible and txt.Text == "ACCEPT" then
-                        if tick() - lastAccept >= (1 / acceptSpeed) then
-                            lastAccept = tick()
-                            click(readyButton)
+            if autoAccept then
+                local other = tradeUI:FindFirstChild("Other")
+                if other then
+                    local ready = other:FindFirstChild("Ready")
+                    local readyButtonObj = other:FindFirstChild("ReadyButton")
+                    if ready and readyButtonObj and readyButtonObj:FindFirstChild("Txt") then
+                        local txt = readyButtonObj.Txt
+                        if ready.Visible and txt.Text == "ACCEPT" then
+                            if tick() - lastAccept >= (1 / acceptSpeed) then
+                                lastAccept = tick()
+                                -- Click Accept
+                                pcall(function() readyButtonObj:Activate() end)
+                                pcall(function() for _, c in ipairs(getconnections(readyButtonObj.Activated)) do c:Fire() end end)
+                                pcall(function() for _, c in ipairs(getconnections(readyButtonObj.MouseButton1Click)) do c:Fire() end end)
+                            end
                         end
                     end
                 end
             end
-        end)
 
-        local function processAccept()
-            if not tradeUI or not tradeUI.Parent then return end
-            local other = tradeUI:FindFirstChild("Other")
-            if not other or not other:FindFirstChild("ReadyButton") or not other.ReadyButton:FindFirstChild("Txt") then return end
-            local txt = other.ReadyButton.Txt
-
-            if txt.Text == "ACCEPT" then
-                if acceptProcessed then return end
-                acceptProcessed = true
-
-                for _, panel in ipairs(adminPanels) do
-                    if panel and panel.Parent and not panel:GetAttribute("Clicked") then
-                        panel.Visible = false
-                    end
-                end
-                for _, panel in ipairs(adminPanels) do
-                    if panel and panel.Parent and panel:GetAttribute("Clicked") then
-                        panel:SetAttribute("Clicked", false)
-                        local spacer = panel:FindFirstChild("Spacer")
-                        if spacer then
-                            spacer.BackgroundColor3 = defaultColor
-                            local stroke = spacer:FindFirstChildOfClass("UIStroke")
-                            if stroke then stroke.Color = Color3.fromRGB(0, 0, 0) end
+            -- Process Accept State
+            pcall(function()
+                local other = tradeUI:FindFirstChild("Other")
+                if other and other:FindFirstChild("ReadyButton") and other.ReadyButton:FindFirstChild("Txt") then
+                    local txt = other.ReadyButton.Txt
+                    if txt.Text == "ACCEPT" then
+                        if not acceptProcessed then
+                            acceptProcessed = true
+                            for _, panel in ipairs(adminPanels) do
+                                if panel and panel.Parent and not panel:GetAttribute("Clicked") then
+                                    panel.Visible = false
+                                end
+                            end
+                            for _, panel in ipairs(adminPanels) do
+                                if panel and panel.Parent and panel:GetAttribute("Clicked") then
+                                    panel:SetAttribute("Clicked", false)
+                                    local spacer = panel:FindFirstChild("Spacer")
+                                    if spacer then
+                                        spacer.BackgroundColor3 = defaultColor
+                                        local stroke = spacer:FindFirstChildOfClass("UIStroke")
+                                        if stroke then stroke.Color = Color3.fromRGB(0, 0, 0) end
+                                    end
+                                end
+                            end
                         end
+                    else
+                        acceptProcessed = false
                     end
                 end
-            else
-                acceptProcessed = false
-            end
+            end)
         end
-
-        local loopThread = task.spawn(function()
-            while tradeUI and tradeUI.Parent do
-                pcall(processAccept)
-                task.wait()
-            end
-        end)
-
-        tradeUI.AncestryChanged:Wait()
-        if hbConn then hbConn:Disconnect() end
+        RunService.Heartbeat:Wait()
     end
 end)

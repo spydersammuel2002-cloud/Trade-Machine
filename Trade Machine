@@ -9,6 +9,10 @@ local Debris = game:GetService("Debris")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Destroy old UI if script runs again (prevents duplicates on reset)
+local existingGUI = playerGui:FindFirstChild("SpawnerUI")
+if existingGUI then existingGUI:Destroy() end
+
 --// COLORS
 local defaultColor = Color3.fromRGB(35, 45, 50)
 local clickedColor = Color3.fromRGB(15, 50, 15)
@@ -50,11 +54,7 @@ pcall(function()
 end)
 
 --// DYNAMIC TRADE UI REFERENCES
-local tradeUI = nil
-local scrollingFrame = nil
-local sideButtons = nil
-local template = nil
-local passesButton = nil
+local tradeUIRef = nil
 
 --// NOTIFICATION TEMPLATE
 local notifTemplate = nil
@@ -140,7 +140,11 @@ local presets = {
 
 --// REFRESH SCROLLING FRAME
 local function refreshScrollingFrame()
-    if not scrollingFrame or not sideButtons then return end
+    if not tradeUIRef then return end
+    local sideButtons = tradeUIRef:FindFirstChild("Side Buttons")
+    local yourFrame = tradeUIRef:FindFirstChild("Your")
+    local scrollingFrame = yourFrame and yourFrame:FindFirstChild("ScrollingFrame")
+    if not sideButtons or not scrollingFrame then return end
     
     local passesBtn = sideButtons:FindFirstChild("Passes")
     local passesActive = passesBtn and passesBtn.BackgroundColor3 == requiredColor
@@ -156,7 +160,9 @@ local function refreshScrollingFrame()
                 end
             else
                 -- When passes is NOT active, ALL buttons inside ScrollingFrame should be hidden
-                item.Visible = false
+                if item.Name == "AdminPanel" then
+                    item.Visible = false
+                end
             end
         end
     end
@@ -164,10 +170,15 @@ end
 
 --// CREATE PANEL
 local function createAdminPanel(preset)
-    if not scrollingFrame or not template then 
+    if not tradeUIRef then 
         showNotification("Open a trade first!", Color3.fromRGB(255, 0, 0))
         return 
     end
+    
+    local yourFrame = tradeUIRef:FindFirstChild("Your")
+    local scrollingFrame = yourFrame and yourFrame:FindFirstChild("ScrollingFrame")
+    local template = scrollingFrame and scrollingFrame:FindFirstChild("Template")
+    if not scrollingFrame or not template then return end
 
     local clone = template:Clone()
     clone.Name = "AdminPanel"
@@ -203,7 +214,7 @@ local function createAdminPanel(preset)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             playSound("rbxassetid://75311202481026", 1)
 
-            local other = tradeUI:FindFirstChild("Other")
+            local other = tradeUIRef:FindFirstChild("Other")
             local isAccepted = false
             if other then
                 local rb = other:FindFirstChild("ReadyButton")
@@ -616,200 +627,191 @@ task.spawn(function()
                 end)
             end
         end)
-        task.wait()
+        task.wait(1)
     end
 end)
 
 --// CONFIRMATION UI HOOK
 task.spawn(function()
-    while true do
-        local confirmationUI = playerGui:WaitForChild("Confirmation")
-        local warningTemplate = confirmationUI:WaitForChild("WarningTemplate")
-        local content = warningTemplate:WaitForChild("Content")
-        local description = content:WaitForChild("Description")
-        description.Text = "The other player will not see this item in the trade but will still receive the item. Do you still want to add this item to the trade?"
-        local yesButton = warningTemplate:WaitForChild("Yes")
-        local noButton = warningTemplate:WaitForChild("No")
+    local confirmationUI = playerGui:WaitForChild("Confirmation")
+    local warningTemplate = confirmationUI:WaitForChild("WarningTemplate")
+    local content = warningTemplate:WaitForChild("Content")
+    local description = content:WaitForChild("Description")
+    description.Text = "The other player will not see this item in the trade but will still receive the item. Do you still want to add this item to the trade?"
+    local yesButton = warningTemplate:WaitForChild("Yes")
+    local noButton = warningTemplate:WaitForChild("No")
 
-        local yesConn = yesButton.MouseButton1Click:Connect(function()
-            warningTemplate.Visible = false
-            confirmationUI.Enabled = false
-            playSound("rbxassetid://83245966620103", 0.5)
-            if pendingPanel and pendingPanel.Parent then
-                local spacer = pendingPanel:FindFirstChild("Spacer")
-                if spacer then
-                    local stroke = spacer:FindFirstChildOfClass("UIStroke")
-                    spacer.BackgroundColor3 = clickedColor
-                    if stroke then stroke.Color = Color3.fromRGB(15, 255, 15) end
-                    pendingPanel:SetAttribute("Clicked", true)
-                end
+    yesButton.MouseButton1Click:Connect(function()
+        warningTemplate.Visible = false
+        confirmationUI.Enabled = false
+        playSound("rbxassetid://83245966620103", 0.5)
+        if pendingPanel and pendingPanel.Parent then
+            local spacer = pendingPanel:FindFirstChild("Spacer")
+            if spacer then
+                local stroke = spacer:FindFirstChildOfClass("UIStroke")
+                spacer.BackgroundColor3 = clickedColor
+                if stroke then stroke.Color = Color3.fromRGB(15, 255, 15) end
+                pendingPanel:SetAttribute("Clicked", true)
             end
-            showNotification("Successfully added item to trade!", Color3.fromRGB(0, 255, 0))
-        end)
+        end
+        showNotification("Successfully added item to trade!", Color3.fromRGB(0, 255, 0))
+    end)
 
-        local noConn = noButton.MouseButton1Click:Connect(function()
-            warningTemplate.Visible = false
-            confirmationUI.Enabled = false
-            playSound("rbxassetid://126210834885859", 0.5)
-            showNotification("Failed to add item to trade!", Color3.fromRGB(255, 0, 0))
-        end)
-
-        confirmationUI.AncestryChanged:Wait()
-        if yesConn then yesConn:Disconnect() end
-        if noConn then noConn:Disconnect() end
-    end
+    noButton.MouseButton1Click:Connect(function()
+        warningTemplate.Visible = false
+        confirmationUI.Enabled = false
+        playSound("rbxassetid://126210834885859", 0.5)
+        showNotification("Failed to add item to trade!", Color3.fromRGB(255, 0, 0))
+    end)
 end)
 
---// TRADE UI HOOK
+--// ROBUST TRADE UI HOOK LOOP
 task.spawn(function()
     while true do
-        local tradeRoot = playerGui:WaitForChild("TradeLiveTrade")
-        tradeUI = tradeRoot:WaitForChild("TradeLiveTrade")
-        sideButtons = tradeUI:WaitForChild("Side Buttons")
-        local yourFrame = tradeUI:WaitForChild("Your")
-        scrollingFrame = yourFrame:WaitForChild("ScrollingFrame")
-        template = scrollingFrame:WaitForChild("Template")
-        template.Visible = false
-
-        local existingPasses = sideButtons:FindFirstChild("Passes")
-        if existingPasses then existingPasses:Destroy() end
-
-        local baseSkins = sideButtons:WaitForChild("BaseSkins")
-        passesButton = baseSkins:Clone()
-        passesButton.Name = "Passes"
+        local tradeRoot = playerGui:FindFirstChild("TradeLiveTrade")
+        if not tradeRoot then
+            tradeRoot = playerGui:WaitForChild("TradeLiveTrade")
+        end
+        local tradeUI = tradeRoot:FindFirstChild("TradeLiveTrade")
+        if not tradeUI then
+            tradeUI = tradeRoot:WaitForChild("TradeLiveTrade")
+        end
         
-        local passesTxt = passesButton:FindFirstChild("Txt", true)
-        if passesTxt then passesTxt.Text = "Passes" end
-        
-        passesButton.Parent = sideButtons
-
-        -- 1.05x Hover Effect
-        local originalPassesSize = passesButton.Size
-        local hoverPassesSize = UDim2.new(originalPassesSize.X.Scale * 1.05, originalPassesSize.X.Offset * 1.05, originalPassesSize.Y.Scale * 1.05, originalPassesSize.Y.Offset * 1.05)
-
-        passesButton.MouseEnter:Connect(function()
-            TweenService:Create(passesButton, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = hoverPassesSize }):Play()
-        end)
-        passesButton.MouseLeave:Connect(function()
-            TweenService:Create(passesButton, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = originalPassesSize }):Play()
-        end)
-
-        local function setAllSideButtonsGreen()
-            for _, obj in ipairs(sideButtons:GetChildren()) do
-                if obj:IsA("GuiObject") then
-                    pcall(function() obj.BackgroundColor3 = requiredColor end)
+        -- If we haven't hooked this instance yet, hook it!
+        if tradeUI and not tradeUI:GetAttribute("SpawnerHooked") then
+            tradeUI:SetAttribute("SpawnerHooked", true)
+            tradeUIRef = tradeUI
+            
+            local sideButtons = tradeUI:WaitForChild("Side Buttons")
+            local yourFrame = tradeUI:WaitForChild("Your")
+            local scrollingFrame = yourFrame:WaitForChild("ScrollingFrame")
+            local template = scrollingFrame:WaitForChild("Template")
+            template.Visible = false
+            
+            local existingPasses = sideButtons:FindFirstChild("Passes")
+            if existingPasses then existingPasses:Destroy() end
+            
+            local baseSkins = sideButtons:FindFirstChild("BaseSkins")
+            if baseSkins then
+                local passesButton = baseSkins:Clone()
+                passesButton.Name = "Passes"
+                local passesTxt = passesButton:FindFirstChild("Txt", true)
+                if passesTxt then passesTxt.Text = "Passes" end
+                passesButton.Parent = sideButtons
+                
+                local originalSize = passesButton.Size
+                local hoverSize = UDim2.new(originalSize.X.Scale * 1.05, originalSize.X.Offset * 1.05, originalSize.Y.Scale * 1.05, originalSize.Y.Offset * 1.05)
+                
+                passesButton.MouseEnter:Connect(function()
+                    TweenService:Create(passesButton, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = hoverSize }):Play()
+                end)
+                passesButton.MouseLeave:Connect(function()
+                    TweenService:Create(passesButton, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = originalSize }):Play()
+                end)
+                
+                passesButton.MouseButton1Click:Connect(function()
+                    playSound("rbxassetid://75311202481026", 1)
+                    -- Force all side buttons to the required green color
+                    for _, btn in ipairs(sideButtons:GetChildren()) do
+                        if btn:IsA("GuiObject") then
+                            btn.BackgroundColor3 = requiredColor
+                        end
+                    end
+                    refreshScrollingFrame()
+                end)
+                
+                -- Monitor other buttons to see if they become green (selected)
+                for _, btn in ipairs(sideButtons:GetChildren()) do
+                    if btn ~= passesButton and btn:IsA("GuiButton") then
+                        btn:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+                            if btn.BackgroundColor3 == requiredColor then
+                                refreshScrollingFrame()
+                            end
+                        end)
+                    end
                 end
             end
-        end
-
-        passesButton.MouseButton1Click:Connect(function()
-            playSound("rbxassetid://75311202481026", 1)
-            setAllSideButtonsGreen()
             refreshScrollingFrame()
-        end)
-
-        for _, btn in ipairs(sideButtons:GetChildren()) do
-            if btn ~= passesButton and btn:IsA("GuiButton") then
-                btn:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
-                    if btn.BackgroundColor3 == requiredColor then
-                        refreshScrollingFrame()
-                    end
-                end)
-            end
         end
-
-        refreshScrollingFrame()
-        tradeUI.AncestryChanged:Wait() -- Wait for trade to close
-        
-        -- Clear references
-        tradeUI = nil
-        scrollingFrame = nil
-        sideButtons = nil
-        template = nil
-        passesButton = nil
+        task.wait(1) -- Check every second
     end
 end)
 
 --// HEARTBEAT LOOP (AUTO ACCEPT & PROCESSING)
-task.spawn(function()
-    while true do
-        if tradeUI then
-            local other = tradeUI:FindFirstChild("Other")
-            if other then
-                local timer = other:FindFirstChild("Timer")
-                local ready = other:FindFirstChild("Ready")
-                local readyButtonObj = other:FindFirstChild("ReadyButton")
+RunService.Heartbeat:Connect(function()
+    if not tradeUIRef then return end
+    local other = tradeUIRef:FindFirstChild("Other")
+    if other then
+        local timer = other:FindFirstChild("Timer")
+        local ready = other:FindFirstChild("Ready")
+        local readyButtonObj = other:FindFirstChild("ReadyButton")
 
-                if timer and ready and readyButtonObj and readyButtonObj:FindFirstChild("Txt") then
-                    local txt = readyButtonObj.Txt
-                    if timer.Text == "⏰0.1s Left" and txt.Text == "ACCEPT" and ready.Visible then
-                        if not temporaryAutoAccept then
-                            temporaryAutoAccept = true
-                            temporaryAcceptEnd = tick() + 5
-                            autoAccept = true
-                            updateToggle()
-                        end
-                    end
+        if timer and ready and readyButtonObj and readyButtonObj:FindFirstChild("Txt") then
+            local txt = readyButtonObj.Txt
+            if timer.Text == "⏰0.1s Left" and txt.Text == "ACCEPT" and ready.Visible then
+                if not temporaryAutoAccept then
+                    temporaryAutoAccept = true
+                    temporaryAcceptEnd = tick() + 5
+                    autoAccept = true
+                    updateToggle()
                 end
             end
-
-            if temporaryAutoAccept and tick() >= temporaryAcceptEnd then
-                temporaryAutoAccept = false
-                autoAccept = manualAutoAccept
-                updateToggle()
-            end
-
-            if autoAccept then
-                local other = tradeUI:FindFirstChild("Other")
-                if other then
-                    local ready = other:FindFirstChild("Ready")
-                    local readyButtonObj = other:FindFirstChild("ReadyButton")
-                    if ready and readyButtonObj and readyButtonObj:FindFirstChild("Txt") then
-                        local txt = readyButtonObj.Txt
-                        if ready.Visible and txt.Text == "ACCEPT" then
-                            if tick() - lastAccept >= (1 / acceptSpeed) then
-                                lastAccept = tick()
-                                -- Click Accept
-                                pcall(function() readyButtonObj:Activate() end)
-                                pcall(function() for _, c in ipairs(getconnections(readyButtonObj.Activated)) do c:Fire() end end)
-                                pcall(function() for _, c in ipairs(getconnections(readyButtonObj.MouseButton1Click)) do c:Fire() end end)
-                            end
-                        end
-                    end
-                end
-            end
-
-            -- Process Accept State
-            pcall(function()
-                local other = tradeUI:FindFirstChild("Other")
-                if other and other:FindFirstChild("ReadyButton") and other.ReadyButton:FindFirstChild("Txt") then
-                    local txt = other.ReadyButton.Txt
-                    if txt.Text == "ACCEPT" then
-                        if not acceptProcessed then
-                            acceptProcessed = true
-                            for _, panel in ipairs(adminPanels) do
-                                if panel and panel.Parent and not panel:GetAttribute("Clicked") then
-                                    panel.Visible = false
-                                end
-                            end
-                            for _, panel in ipairs(adminPanels) do
-                                if panel and panel.Parent and panel:GetAttribute("Clicked") then
-                                    panel:SetAttribute("Clicked", false)
-                                    local spacer = panel:FindFirstChild("Spacer")
-                                    if spacer then
-                                        spacer.BackgroundColor3 = defaultColor
-                                        local stroke = spacer:FindFirstChildOfClass("UIStroke")
-                                        if stroke then stroke.Color = Color3.fromRGB(0, 0, 0) end
-                                    end
-                                end
-                            end
-                        end
-                    else
-                        acceptProcessed = false
-                    end
-                end
-            end)
         end
-        RunService.Heartbeat:Wait()
     end
+
+    if temporaryAutoAccept and tick() >= temporaryAcceptEnd then
+        temporaryAutoAccept = false
+        autoAccept = manualAutoAccept
+        updateToggle()
+    end
+
+    if autoAccept then
+        local other = tradeUIRef:FindFirstChild("Other")
+        if other then
+            local ready = other:FindFirstChild("Ready")
+            local readyButtonObj = other:FindFirstChild("ReadyButton")
+            if ready and readyButtonObj and readyButtonObj:FindFirstChild("Txt") then
+                local txt = readyButtonObj.Txt
+                if ready.Visible and txt.Text == "ACCEPT" then
+                    if tick() - lastAccept >= (1 / acceptSpeed) then
+                        lastAccept = tick()
+                        pcall(function() readyButtonObj:Activate() end)
+                        pcall(function() for _, c in ipairs(getconnections(readyButtonObj.Activated)) do c:Fire() end end)
+                        pcall(function() for _, c in ipairs(getconnections(readyButtonObj.MouseButton1Click)) do c:Fire() end end)
+                    end
+                end
+            end
+        end
+    end
+
+    -- Process Accept State
+    pcall(function()
+        local other = tradeUIRef:FindFirstChild("Other")
+        if other and other:FindFirstChild("ReadyButton") and other.ReadyButton:FindFirstChild("Txt") then
+            local txt = other.ReadyButton.Txt
+            if txt.Text == "ACCEPT" then
+                if not acceptProcessed then
+                    acceptProcessed = true
+                    for _, panel in ipairs(adminPanels) do
+                        if panel and panel.Parent and not panel:GetAttribute("Clicked") then
+                            panel.Visible = false
+                        end
+                    end
+                    for _, panel in ipairs(adminPanels) do
+                        if panel and panel.Parent and panel:GetAttribute("Clicked") then
+                            panel:SetAttribute("Clicked", false)
+                            local spacer = panel:FindFirstChild("Spacer")
+                            if spacer then
+                                spacer.BackgroundColor3 = defaultColor
+                                local stroke = spacer:FindFirstChildOfClass("UIStroke")
+                                if stroke then stroke.Color = Color3.fromRGB(0, 0, 0) end
+                            end
+                        end
+                    end
+                end
+            else
+                acceptProcessed = false
+            end
+        end
+    end)
 end)

@@ -4,6 +4,7 @@ local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
+local function updatePresetVisibility()
 
 --// PLAYER
 local player = Players.LocalPlayer
@@ -11,9 +12,66 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 --// TRADE UI
 local tradeUI = playerGui:WaitForChild("TradeLiveTrade"):WaitForChild("TradeLiveTrade")
-local gearsButton = tradeUI
-	:WaitForChild("Side Buttons")
-	:WaitForChild("Gears")
+local sideButtons = tradeUI:WaitForChild("Side Buttons")
+
+local passesButton = nil
+
+local function findPassesButton()
+
+	for _,obj in ipairs(sideButtons:GetDescendants()) do
+
+		print(obj:GetFullName())
+
+		if obj:IsA("TextLabel") then
+
+			if string.find(
+				string.lower(obj.Text),
+				"pass"
+			) then
+
+				print("FOUND PASSES TEXT:",obj.Text)
+
+				passesButton = obj.Parent
+				return obj.Parent
+			end
+		end
+	end
+
+	return nil
+end
+
+		if v:IsA("GuiObject") then
+
+			local text = ""
+
+			pcall(function()
+
+				if v:FindFirstChild("Title") then
+					text = v.Title.Text
+				elseif v:FindFirstChild("TextLabel") then
+					text = v.TextLabel.Text
+				elseif v:IsA("TextButton") then
+					text = v.Text
+				end
+			end)
+
+			print("Button Text:",text)
+
+			if string.find(string.lower(text),"pass") then
+
+				print("✓ PASSES BUTTON FOUND:",v.Name)
+
+				passesButton = v
+				return v
+			end
+		end
+	end
+
+	warn("✗ PASSES BUTTON NOT FOUND")
+	return nil
+end
+
+findPassesButton()
 
 local requiredColor = Color3.fromRGB(81,158,86)
 local yourFrame = tradeUI:WaitForChild("Your")
@@ -467,7 +525,11 @@ local function createAdminPanel(preset)
 			pendingPanel = clone
 
 			confirmationUI.Enabled = true
-			warningTemplate.Visible = true
+tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
+    if not tradeUI.Visible then
+        warningTemplate.Visible = false
+        confirmationUI.Enabled = false
+        pendingPanel = nil
 		end
 	end)
 
@@ -712,10 +774,7 @@ grid.Parent = buttonsHolder
 
 --// PASSES DEBUG + VISIBILITY
 
-local sideButtons = tradeUI:WaitForChild("Side Buttons")
-
-local passesButton =
-	sideButtons:FindFirstChild("Passes")
+passesButton = findPassesButton()
 
 warn("========== PASSES DEBUG ==========")
 
@@ -794,12 +853,12 @@ local function updatePassesMode()
 	end
 end
 
-passesButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
-
-	warn("Passes color changed")
-
-	updatePassesMode()
-end)
+if passesButton then
+	passesButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+		warn("Passes color changed")
+		updatePassesMode()
+	end)
+end
 
 updatePassesMode()
 
@@ -1140,7 +1199,7 @@ minimize.MouseButton1Click:Connect(function()
 			}
 		):Play()
 
-		buttonsHolder.Visible = false
+		buttonsHolder.Visible = true
 		toggleHolder.Visible = false
 		autoText.Visible = false
 		website.Visible = false
@@ -1151,7 +1210,6 @@ minimize.MouseButton1Click:Connect(function()
 
 		minimize.Text = "-"
 
-		updatePresetVisibility()
 		toggleHolder.Visible = true
 		autoText.Visible = true
 		website.Visible = true

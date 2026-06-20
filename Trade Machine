@@ -1,15 +1,12 @@
---// SERVICES
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 
---// PLAYER
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
---// TRADE UI
 local tradeUI = playerGui:WaitForChild("TradeLiveTrade"):WaitForChild("TradeLiveTrade")
 local gearsButton = tradeUI
     :WaitForChild("Side Buttons")
@@ -22,17 +19,16 @@ local template = scrollingFrame:WaitForChild("Template")
 
 template.Visible = false
 
---// FORCE HIDE SELECTION_GEAR
 local function forceHideSelectionGears()
     for _, child in ipairs(scrollingFrame:GetChildren()) do
-        if string.find(child.Name, "Selection_Gear") and child.Visible then
+        if string.sub(child.Name, 1, 14) == "Selection_Gear" and child.Visible then
             child.Visible = false
         end
     end
 end
 
 scrollingFrame.ChildAdded:Connect(function(child)
-    if string.find(child.Name, "Selection_Gear") then
+    if string.sub(child.Name, 1, 14) == "Selection_Gear" then
         child.Visible = false
         child:GetPropertyChangedSignal("Visible"):Connect(function()
             if child.Visible then
@@ -42,9 +38,6 @@ scrollingFrame.ChildAdded:Connect(function(child)
     end
 end)
 
-RunService.Heartbeat:Connect(forceHideSelectionGears)
-
---// CONFIRMATION
 local confirmationUI = playerGui:WaitForChild("Confirmation")
 local warningTemplate = confirmationUI:WaitForChild("WarningTemplate")
 
@@ -54,12 +47,10 @@ local description = content:WaitForChild("Description")
 local yesButton = warningTemplate:WaitForChild("Yes")
 local noButton = warningTemplate:WaitForChild("No")
 
---// NOTIFICATION
 local notificationRoot = playerGui:WaitForChild("Notification")
 local notificationUI = notificationRoot:WaitForChild("Notification")
 local notifTemplate = notificationUI:WaitForChild("Template")
 
---// COLORS
 local defaultColor = Color3.fromRGB(35,45,50)
 local clickedColor = Color3.fromRGB(15,50,15)
 
@@ -70,13 +61,11 @@ local darkPurple = Color3.fromRGB(28,18,40)
 local panelDark = Color3.fromRGB(18,18,24)
 local softPink = Color3.fromRGB(255,120,220)
 
---// TABLES
 local adminPanels = {}
 local removedPresets = {}
 
 local pendingPanel = nil
 
---// AUTO ACCEPT
 local autoAccept = false
 local manualAutoAccept = false
 local temporaryAutoAccept = false
@@ -86,8 +75,8 @@ local lastAccept = 0
 local temporaryAcceptEnd = 0
 
 local notificationCooldown = {}
+local acceptProcessed = false
 
---// KEYBIND
 local keybindListening = false
 local keybind = Enum.KeyCode.F
 
@@ -101,7 +90,6 @@ pcall(function()
     end
 end)
 
---// PRESETS
 local presets = {
     {
         Name = "Admin",
@@ -177,7 +165,6 @@ local presets = {
     },
 }
 
---// SOUND
 local function playSound(id, volume)
     local sound = Instance.new("Sound")
     sound.SoundId = id
@@ -189,7 +176,6 @@ local function playSound(id, volume)
     Debris:AddItem(sound,5)
 end
 
---// NEON
 local function neonText(obj)
     if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
 
@@ -210,7 +196,6 @@ end
 description.Text =
     "The other player will not see this item in the trade but will still receive the item. Do you still want to add this item to the trade?"
 
---// FORCE TEXTS
 local function forceText(obj, text)
     if not obj then return end
     obj.Text = text
@@ -229,7 +214,6 @@ forceText(gearsTxt, "Gamepasses")
 forceText(yesFunction, "Add")
 forceText(noFunction, "Cancel")
 
---// HOVER UPWARDS 1.1x
 local btnStates = {}
 
 local function setupHoverUpwards(btn)
@@ -273,7 +257,6 @@ end
 setupHoverUpwards(yesButton)
 setupHoverUpwards(noButton)
 
---// SETTINGS TEXT
 task.spawn(function()
 
     local connected = false
@@ -309,7 +292,6 @@ task.spawn(function()
     end
 end)
 
---// NOTIFICATIONS
 local function showNotification(text,color)
 
     if notificationCooldown[text] then
@@ -367,7 +349,6 @@ local function showNotification(text,color)
     end)
 end
 
---// ACCEPT STATE
 local function getAcceptState()
 
     local other = tradeUI:FindFirstChild("Other")
@@ -391,7 +372,6 @@ local function getAcceptState()
     return txt.Text == "ACCEPT"
 end
 
---// UPDATE PRESET VISIBILITY (GEARS COLOR & ACCEPT STATE)
 local function updatePresetVisibility()
     local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
     local isAccept = getAcceptState()
@@ -402,17 +382,14 @@ local function updatePresetVisibility()
                 panel.Visible = false
             else
                 local isClicked = panel:GetAttribute("Clicked") == true
+                local isAcceptedVisible = panel:GetAttribute("AcceptedVisible") == true
                 
-                if isClicked then
-                    -- Green presets are ALWAYS visible
-                    panel.Visible = true
+                if isAccept then
+                    panel.Visible = isAcceptedVisible
                 else
-                    -- Normal presets
-                    if isAccept then
-                        -- Only green presets should be visible during ACCEPT
-                        panel.Visible = false
+                    if isClicked then
+                        panel.Visible = true
                     else
-                        -- Show normal presets ONLY if Gears is green
                         panel.Visible = isGreenGears
                     end
                 end
@@ -421,7 +398,6 @@ local function updatePresetVisibility()
     end
 end
 
---// RESET PANELS
 local function resetPanels()
     local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
     local isAccept = getAcceptState()
@@ -431,6 +407,7 @@ local function resetPanels()
             if not removedPresets[panel] then
                 
                 panel:SetAttribute("Clicked",false)
+                panel:SetAttribute("AcceptedVisible", false)
 
                 local spacer = panel:FindFirstChild("Spacer")
                 if spacer then
@@ -441,7 +418,6 @@ local function resetPanels()
                     end
                 end
 
-                -- After resetting, apply normal visibility logic (isClicked = false)
                 if isAccept then
                     panel.Visible = false
                 else
@@ -454,11 +430,36 @@ local function resetPanels()
     end
 end
 
+local function checkAcceptState()
+    if getAcceptState() and not acceptProcessed then
+        acceptProcessed = true
+        for _, panel in ipairs(adminPanels) do
+            if panel and panel.Parent then
+                if panel:GetAttribute("Clicked") then
+                    panel:SetAttribute("AcceptedVisible", true)
+                    panel:SetAttribute("Clicked", false)
+                    local spacer = panel:FindFirstChild("Spacer")
+                    if spacer then
+                        spacer.BackgroundColor3 = defaultColor
+                        local stroke = spacer:FindFirstChildOfClass("UIStroke")
+                        if stroke then
+                            stroke.Color = Color3.fromRGB(0,0,0)
+                        end
+                    end
+                else
+                    panel:SetAttribute("AcceptedVisible", false)
+                end
+            end
+        end
+        updatePresetVisibility()
+    end
+end
+
 tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
     if tradeUI.Visible then
+        acceptProcessed = false
         resetPanels()
     else
-        -- Hide warning when trade UI is hidden
         warningTemplate.Visible = false
         confirmationUI.Enabled = false
         pendingPanel = nil
@@ -474,7 +475,6 @@ gearsButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
     updatePresetVisibility()
 end)
 
--- Listen for ACCEPT text changes dynamically
 task.spawn(function()
     while true do
         pcall(function()
@@ -498,7 +498,6 @@ end)
 
 updatePresetVisibility()
 
---// CREATE PANEL
 local function createAdminPanel(preset)
 
     local clone = template:Clone()
@@ -509,7 +508,6 @@ local function createAdminPanel(preset)
     local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
     local isAccept = getAcceptState()
     
-    -- New panels are not clicked (isClicked = false)
     if isAccept then
         clone.Visible = false
     else
@@ -553,32 +551,9 @@ local function createAdminPanel(preset)
 
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
 
+            if getAcceptState() then return end
+
             playSound("rbxassetid://75311202481026",1)
-
-            if getAcceptState() then
-
-                if clone:GetAttribute("Clicked") then
-
-                    clone:SetAttribute("Clicked",false)
-
-                    spacer.BackgroundColor3 = defaultColor
-
-                    if stroke then
-                        stroke.Color = Color3.fromRGB(0,0,0)
-                    end
-
-                    showNotification(
-                        'Removed "'..preset.Title..'" from trade!',
-                        Color3.fromRGB(255,0,0)
-                    )
-
-                    playSound("rbxassetid://126210834885859",0.5)
-                    
-                    updatePresetVisibility()
-                end
-
-                return
-            end
 
             if clone:GetAttribute("Clicked") then
 
@@ -612,7 +587,6 @@ local function createAdminPanel(preset)
     table.insert(adminPanels,clone)
 end
 
---// COUNT
 local function getVisibleCount(name)
 
     local count = 0
@@ -630,7 +604,6 @@ local function getVisibleCount(name)
     return count
 end
 
---// REMOVE PRESET FIXED
 local function removePreset(name)
 
     for i = #adminPanels,1,-1 do
@@ -658,7 +631,6 @@ local function removePreset(name)
     end
 end
 
---// YES
 yesButton.MouseButton1Click:Connect(function()
 
     warningTemplate.Visible = false
@@ -695,7 +667,6 @@ yesButton.MouseButton1Click:Connect(function()
     )
 end)
 
---// NO
 noButton.MouseButton1Click:Connect(function()
 
     warningTemplate.Visible = false
@@ -714,7 +685,6 @@ noButton.MouseButton1Click:Connect(function()
     )
 end)
 
---// MAIN GUI
 local gui = Instance.new("ScreenGui")
 gui.Name = "SpawnerUI"
 gui.ResetOnSpawn = false
@@ -722,7 +692,6 @@ gui.DisplayOrder = 999999
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
---// FRAME
 local frame = Instance.new("Frame")
 frame.Parent = gui
 
@@ -762,7 +731,6 @@ TweenService:Create(
     }
 ):Play()
 
---// TOPBAR
 local topBar = Instance.new("Frame")
 topBar.Parent = frame
 
@@ -779,7 +747,6 @@ local topCorner = Instance.new("UICorner")
 topCorner.CornerRadius = UDim.new(0,14)
 topCorner.Parent = topBar
 
---// TITLE
 local title = Instance.new("TextLabel")
 title.Parent = topBar
 
@@ -795,7 +762,6 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 
 neonText(title)
 
---// MINIMIZE
 local minimize = Instance.new("TextButton")
 minimize.Parent = topBar
 
@@ -814,7 +780,6 @@ neonText(minimize)
 local minCorner = Instance.new("UICorner")
 minCorner.Parent = minimize
 
---// CLOSE
 local closeButton = Instance.new("TextButton")
 closeButton.Parent = topBar
 
@@ -849,7 +814,6 @@ closeButton.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
---// BUTTON HOLDER
 local buttonsHolder = Instance.new("Frame")
 buttonsHolder.Parent = frame
 
@@ -867,7 +831,6 @@ grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 grid.VerticalAlignment = Enum.VerticalAlignment.Top
 grid.SortOrder = Enum.SortOrder.LayoutOrder
 
---// PRESET BUTTONS
 for _,preset in ipairs(presets) do
 
     local button = Instance.new("ImageButton")
@@ -938,7 +901,6 @@ for _,preset in ipairs(presets) do
     end)
 end
 
---// AUTO TEXT
 local autoText = Instance.new("TextLabel")
 autoText.Parent = frame
 
@@ -953,7 +915,6 @@ autoText.TextColor3 = Color3.new(1,1,1)
 
 neonText(autoText)
 
---// TOGGLE HOLDER
 local toggleHolder = Instance.new("Frame")
 toggleHolder.Parent = frame
 
@@ -983,7 +944,6 @@ local circleCorner = Instance.new("UICorner")
 circleCorner.Parent = toggleCircle
 circleCorner.CornerRadius = UDim.new(1,0)
 
---// UPDATE TOGGLE
 local function updateToggle()
 
     if autoAccept then
@@ -1010,7 +970,6 @@ local function updateToggle()
     end
 end
 
---// TOGGLE CLICK
 toggleHolder.InputBegan:Connect(function(input)
 
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1022,7 +981,6 @@ toggleHolder.InputBegan:Connect(function(input)
     end
 end)
 
---// SPEED BOX
 local speedBox = Instance.new("TextBox")
 speedBox.Parent = frame
 
@@ -1071,7 +1029,6 @@ speedBox.FocusLost:Connect(function()
     speedBox.Text = tostring(num).."..."
 end)
 
---// KEYBIND BUTTON
 local keybindButton = Instance.new("TextButton")
 keybindButton.Parent = frame
 
@@ -1103,7 +1060,6 @@ keybindButton.MouseButton1Click:Connect(function()
     )
 end)
 
---// INPUTS
 UIS.InputBegan:Connect(function(input,gpe)
 
     if gpe then
@@ -1145,7 +1101,6 @@ UIS.InputBegan:Connect(function(input,gpe)
     end
 end)
 
---// WEBSITE
 local website = Instance.new("TextButton")
 website.Parent = frame
 
@@ -1176,7 +1131,6 @@ website.MouseButton1Click:Connect(function()
     )
 end)
 
---// MINIMIZE
 local minimized = false
 
 minimize.MouseButton1Click:Connect(function()
@@ -1222,7 +1176,6 @@ minimize.MouseButton1Click:Connect(function()
     end
 end)
 
---// BACKQUOTE TOGGLE
 UIS.InputBegan:Connect(function(input,gpe)
 
     if gpe then
@@ -1234,7 +1187,6 @@ UIS.InputBegan:Connect(function(input,gpe)
     end
 end)
 
---// DRAGGING
 local dragging = false
 local dragStart
 local startPos
@@ -1271,7 +1223,6 @@ UIS.InputChanged:Connect(function(input)
     end
 end)
 
---// READY
 local readyFrame
 local readyButton
 
@@ -1295,7 +1246,6 @@ end
 
 findGui()
 
---// CLICK
 local function click(button)
 
     if not button then return end
@@ -1321,10 +1271,10 @@ local function click(button)
     end)
 end
 
---// HEARTBEAT
 RunService.Heartbeat:Connect(function()
 
-    -- Ensure warning is hidden if trade UI is hidden
+    forceHideSelectionGears()
+
     if not tradeUI.Visible and warningTemplate.Visible then
         warningTemplate.Visible = false
         confirmationUI.Enabled = false
@@ -1333,6 +1283,8 @@ RunService.Heartbeat:Connect(function()
         resetHover(yesButton)
         resetHover(noButton)
     end
+
+    checkAcceptState()
 
     local other = tradeUI:FindFirstChild("Other")
 

@@ -25,14 +25,14 @@ template.Visible = false
 --// FORCE HIDE SELECTION_GEAR
 local function forceHideSelectionGears()
     for _, child in ipairs(scrollingFrame:GetChildren()) do
-        if string.sub(child.Name, 1, 14) == "Selection_Gear" and child.Visible then
+        if string.find(child.Name, "Selection_Gear") and child.Visible then
             child.Visible = false
         end
     end
 end
 
 scrollingFrame.ChildAdded:Connect(function(child)
-    if string.sub(child.Name, 1, 14) == "Selection_Gear" then
+    if string.find(child.Name, "Selection_Gear") then
         child.Visible = false
         child:GetPropertyChangedSignal("Visible"):Connect(function()
             if child.Visible then
@@ -86,7 +86,6 @@ local lastAccept = 0
 local temporaryAcceptEnd = 0
 
 local notificationCooldown = {}
-local acceptProcessed = false
 
 --// KEYBIND
 local keybindListening = false
@@ -110,77 +109,66 @@ local presets = {
         Cash = "9,999",
         Title = "[🎁] Admin Panel"
     },
-
     {
         Name = "VIP",
         Image = "rbxassetid://89326624889199",
         Cash = "499",
         Title = "[🎁] VIP"
     },
-
     {
         Name = "Hammer",
         Image = "rbxassetid://113735454516185",
         Cash = "1,499",
         Title = "[🎁] Ban Hammer"
     },
-
     {
         Name = "Laser",
         Image = "rbxassetid://127461267233201",
         Cash = "749",
         Title = "[🎁] Laser Gun"
     },
-
     {
         Name = "Money",
         Image = "rbxassetid://93863319650684",
         Cash = "299",
         Title = "[🎁] 2x Money"
     },
-
     {
         Name = "Witch",
         Image = "rbxassetid://118466141203194",
         Cash = "499",
         Title = "[🎁] Witch Broom"
     },
-
     {
         Name = "Lucky Base",
         Image = "rbxassetid://90829604470739",
         Cash = "799",
         Title = "[🎁] Pot of Gold Base"
     },
-
     {
         Name = "Bunny Base",
         Image = "rbxassetid://114643827804140",
         Cash = "999",
         Title = "[🎁] Bunny Basket Base"
     },
-
     {
         Name = "Wings",
         Image = "rbxassetid://119199032365694",
         Cash = "799",
         Title = "[🎁] Cupids Wings"
     },
-
     {
         Name = "Blackhole",
         Image = "rbxassetid://88520285647604",
         Cash = "199",
         Title = "[🎁] Blackhole Slap"
     },
-
     {
         Name = "Carpet",
         Image = "rbxassetid://124807886192972",
         Cash = "375",
         Title = "[🎁] Flying Carpet"
     },
-
     {
         Name = "Chain",
         Image = "rbxassetid://70478645851404",
@@ -403,36 +391,31 @@ local function getAcceptState()
     return txt.Text == "ACCEPT"
 end
 
-local function isAnyPresetGreen()
-    for _, panel in ipairs(adminPanels) do
-        if panel and panel.Parent and panel:GetAttribute("Clicked") then
-            return true
-        end
-    end
-    return false
-end
-
---// UPDATE PRESET VISIBILITY (GEARS COLOR)
+--// UPDATE PRESET VISIBILITY (GEARS COLOR & ACCEPT STATE)
 local function updatePresetVisibility()
     local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
     local isAccept = getAcceptState()
-    local hasGreenPreset = isAnyPresetGreen()
     
     for _, panel in ipairs(adminPanels) do
         if panel and panel.Parent then
             if removedPresets[panel] then
                 panel.Visible = false
-            elseif isAccept then
-                -- When Txt says "ACCEPT", show all normal presets no matter what color Gears is
-                panel.Visible = true
-            elseif hasGreenPreset then
-                -- If we have green presets, only keep showing the green ones
-                panel.Visible = (panel:GetAttribute("Clicked") == true)
-            elseif isGreenGears then
-                -- If no green presets but Gears is green, show all
-                panel.Visible = true
             else
-                panel.Visible = false
+                local isClicked = panel:GetAttribute("Clicked") == true
+                
+                if isClicked then
+                    -- Green presets are ALWAYS visible
+                    panel.Visible = true
+                else
+                    -- Normal presets
+                    if isAccept then
+                        -- Only green presets should be visible during ACCEPT
+                        panel.Visible = false
+                    else
+                        -- Show normal presets ONLY if Gears is green
+                        panel.Visible = isGreenGears
+                    end
+                end
             end
         end
     end
@@ -446,24 +429,23 @@ local function resetPanels()
     for _,panel in ipairs(adminPanels) do
         if panel and panel.Parent then
             if not removedPresets[panel] then
-                if isAccept then
-                    panel.Visible = true
-                elseif isAnyPresetGreen() then
-                    panel.Visible = (panel:GetAttribute("Clicked") == true)
-                else
-                    panel.Visible = isGreenGears
-                end
-
+                
                 panel:SetAttribute("Clicked",false)
 
                 local spacer = panel:FindFirstChild("Spacer")
-
                 if spacer then
                     spacer.BackgroundColor3 = defaultColor
                     local stroke = spacer:FindFirstChildOfClass("UIStroke")
                     if stroke then
                         stroke.Color = Color3.fromRGB(0,0,0)
                     end
+                end
+
+                -- After resetting, apply normal visibility logic (isClicked = false)
+                if isAccept then
+                    panel.Visible = false
+                else
+                    panel.Visible = isGreenGears
                 end
             else
                 panel.Visible = false
@@ -474,7 +456,6 @@ end
 
 tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
     if tradeUI.Visible then
-        acceptProcessed = false
         resetPanels()
     else
         -- Hide warning when trade UI is hidden
@@ -525,15 +506,14 @@ local function createAdminPanel(preset)
     clone.Name = "AdminPanel"
     clone.Parent = scrollingFrame
 
+    local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
     local isAccept = getAcceptState()
-    local hasGreenPreset = isAnyPresetGreen()
     
+    -- New panels are not clicked (isClicked = false)
     if isAccept then
-        clone.Visible = true
-    elseif hasGreenPreset then
-        clone.Visible = false -- New panels are not green yet
+        clone.Visible = false
     else
-        clone.Visible = (gearsButton.BackgroundColor3 == requiredColor)
+        clone.Visible = isGreenGears
     end
 
     local spacer = clone:WaitForChild("Spacer")
@@ -1426,78 +1406,5 @@ RunService.Heartbeat:Connect(function()
                 end
             end
         end
-    end
-end)
-
---// PROCESS ACCEPT
-local function processAccept()
-
-    local other = tradeUI:FindFirstChild("Other")
-
-    if not other then
-        return
-    end
-
-    local readyButtonObj = other:FindFirstChild("ReadyButton")
-
-    if not readyButtonObj then
-        return
-    end
-
-    local txt = readyButtonObj:FindFirstChild("Txt")
-
-    if not txt then
-        return
-    end
-
-    if txt.Text == "ACCEPT" then
-
-        if acceptProcessed then
-            return
-        end
-
-        acceptProcessed = true
-
-        for _,panel in ipairs(adminPanels) do
-
-            if panel and panel.Parent then
-
-                if panel:GetAttribute("Clicked") then
-
-                    panel:SetAttribute("Clicked",false)
-
-                    local spacer = panel:FindFirstChild("Spacer")
-
-                    if spacer then
-
-                        spacer.BackgroundColor3 = defaultColor
-
-                        local stroke = spacer:FindFirstChildOfClass("UIStroke")
-
-                        if stroke then
-                            stroke.Color = Color3.fromRGB(0,0,0)
-                        end
-                    end
-                end
-            end
-        end
-        
-        updatePresetVisibility()
-
-    else
-        if not acceptProcessed then return end
-        acceptProcessed = false
-        updatePresetVisibility()
-    end
-end
-
---// LOOP
-task.spawn(function()
-
-    while true do
-
-        pcall(processAccept)
-
-        task.wait()
     end
 end)

@@ -22,6 +22,28 @@ local template = scrollingFrame:WaitForChild("Template")
 
 template.Visible = false
 
+--// FORCE HIDE SELECTION_GEAR
+local function forceHideSelectionGears()
+    for _, child in ipairs(scrollingFrame:GetChildren()) do
+        if string.sub(child.Name, 1, 14) == "Selection_Gear" and child.Visible then
+            child.Visible = false
+        end
+    end
+end
+
+scrollingFrame.ChildAdded:Connect(function(child)
+    if string.sub(child.Name, 1, 14) == "Selection_Gear" then
+        child.Visible = false
+        child:GetPropertyChangedSignal("Visible"):Connect(function()
+            if child.Visible then
+                child.Visible = false
+            end
+        end)
+    end
+end)
+
+RunService.Heartbeat:Connect(forceHideSelectionGears)
+
 --// CONFIRMATION
 local confirmationUI = playerGui:WaitForChild("Confirmation")
 local warningTemplate = confirmationUI:WaitForChild("WarningTemplate")
@@ -390,36 +412,27 @@ local function isAnyPresetGreen()
     return false
 end
 
-local function shouldBypassGearsCheck()
-    -- Stop ignoring if the Trade UI goes invisible
-    if not tradeUI.Visible then return false end
-    
-    -- Bypass if ACCEPT text is set or any preset is in green color mode
-    if getAcceptState() then return true end
-    if isAnyPresetGreen() then return true end
-    
-    return false
-end
-
 --// UPDATE PRESET VISIBILITY (GEARS COLOR)
 local function updatePresetVisibility()
-    local bypass = shouldBypassGearsCheck()
-    local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
+    local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
+    local isAccept = getAcceptState()
+    local hasGreenPreset = isAnyPresetGreen()
     
     for _, panel in ipairs(adminPanels) do
         if panel and panel.Parent then
             if removedPresets[panel] then
                 panel.Visible = false
-            elseif bypass then
-                -- If bypassing, ignore gears color check completely.
-                -- But preserve processAccept hiding unclicked panels when ACCEPT is active
-                if acceptProcessed and not panel:GetAttribute("Clicked") and getAcceptState() then
-                    panel.Visible = false
-                else
-                    panel.Visible = true
-                end
+            elseif isAccept then
+                -- When Txt says "ACCEPT", show all normal presets no matter what color Gears is
+                panel.Visible = true
+            elseif hasGreenPreset then
+                -- If we have green presets, only keep showing the green ones
+                panel.Visible = (panel:GetAttribute("Clicked") == true)
+            elseif isGreenGears then
+                -- If no green presets but Gears is green, show all
+                panel.Visible = true
             else
-                panel.Visible = isGreen
+                panel.Visible = false
             end
         end
     end
@@ -427,24 +440,18 @@ end
 
 --// RESET PANELS
 local function resetPanels()
-
-    local bypass = shouldBypassGearsCheck()
-    local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
+    local isGreenGears = (gearsButton.BackgroundColor3 == requiredColor)
+    local isAccept = getAcceptState()
 
     for _,panel in ipairs(adminPanels) do
-
         if panel and panel.Parent then
-
             if not removedPresets[panel] then
-
-                if bypass then
-                    if acceptProcessed and not panel:GetAttribute("Clicked") and getAcceptState() then
-                        panel.Visible = false
-                    else
-                        panel.Visible = true
-                    end
+                if isAccept then
+                    panel.Visible = true
+                elseif isAnyPresetGreen() then
+                    panel.Visible = (panel:GetAttribute("Clicked") == true)
                 else
-                    panel.Visible = isGreen
+                    panel.Visible = isGreenGears
                 end
 
                 panel:SetAttribute("Clicked",false)
@@ -452,11 +459,8 @@ local function resetPanels()
                 local spacer = panel:FindFirstChild("Spacer")
 
                 if spacer then
-
                     spacer.BackgroundColor3 = defaultColor
-
                     local stroke = spacer:FindFirstChildOfClass("UIStroke")
-
                     if stroke then
                         stroke.Color = Color3.fromRGB(0,0,0)
                     end
@@ -469,15 +473,10 @@ local function resetPanels()
 end
 
 tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
-
     if tradeUI.Visible then
-
         acceptProcessed = false
-
         resetPanels()
-
     else
-
         -- Hide warning when trade UI is hidden
         warningTemplate.Visible = false
         confirmationUI.Enabled = false
@@ -526,8 +525,13 @@ local function createAdminPanel(preset)
     clone.Name = "AdminPanel"
     clone.Parent = scrollingFrame
 
-    if shouldBypassGearsCheck() then
+    local isAccept = getAcceptState()
+    local hasGreenPreset = isAnyPresetGreen()
+    
+    if isAccept then
         clone.Visible = true
+    elseif hasGreenPreset then
+        clone.Visible = false -- New panels are not green yet
     else
         clone.Visible = (gearsButton.BackgroundColor3 == requiredColor)
     end
@@ -554,7 +558,6 @@ local function createAdminPanel(preset)
     local img = spacer:FindFirstChild("CustomImage")
 
     if not img then
-
         img = Instance.new("ImageLabel")
         img.Name = "CustomImage"
         img.Parent = spacer
@@ -1459,16 +1462,6 @@ local function processAccept()
 
             if panel and panel.Parent then
 
-                if not panel:GetAttribute("Clicked") then
-                    panel.Visible = false
-                end
-            end
-        end
-
-        for _,panel in ipairs(adminPanels) do
-
-            if panel and panel.Parent then
-
                 if panel:GetAttribute("Clicked") then
 
                     panel:SetAttribute("Clicked",false)
@@ -1488,9 +1481,13 @@ local function processAccept()
                 end
             end
         end
+        
+        updatePresetVisibility()
 
     else
+        if not acceptProcessed then return end
         acceptProcessed = false
+        updatePresetVisibility()
     end
 end
 

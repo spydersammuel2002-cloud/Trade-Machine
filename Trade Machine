@@ -220,9 +220,12 @@ forceText(yesFunction, "Add")
 forceText(noFunction, "Cancel")
 
 --// HOVER UPWARDS 1.1x
+local btnStates = {}
+
 local function setupHoverUpwards(btn)
     local origSize = btn.Size
     local origPos = btn.Position
+    btnStates[btn] = {Size = origSize, Position = origPos}
 
     local hoverSize = UDim2.new(
         origSize.X.Scale * 1.1, origSize.X.Offset * 1.1,
@@ -233,7 +236,7 @@ local function setupHoverUpwards(btn)
         origPos.X.Scale - (hoverSize.X.Scale - origSize.X.Scale)/2,
         origPos.X.Offset - (hoverSize.X.Offset - origSize.X.Offset)/2,
         origPos.Y.Scale - (hoverSize.Y.Scale - origSize.Y.Scale),
-        origPos.Y.Offset - (hoverSize.Y.Offset - origSize.Y.Offset)
+        origPos.Y.Offset - (hoverSize.Y.Offset - origPos.Y.Offset)
     )
 
     btn.MouseEnter:Connect(function()
@@ -249,6 +252,12 @@ local function setupHoverUpwards(btn)
             Position = origPos
         }):Play()
     end)
+end
+
+local function resetHover(btn)
+    if btnStates[btn] then
+        TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), btnStates[btn]):Play()
+    end
 end
 
 setupHoverUpwards(yesButton)
@@ -357,7 +366,8 @@ local function resetPanels()
 
             if not removedPresets[panel] then
 
-                panel.Visible = true
+                local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
+                panel.Visible = isGreen
 
                 panel:SetAttribute("Clicked",false)
 
@@ -394,8 +404,31 @@ tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
         warningTemplate.Visible = false
         confirmationUI.Enabled = false
         pendingPanel = nil
+
+        resetHover(yesButton)
+        resetHover(noButton)
     end
 end)
+
+--// UPDATE PRESET VISIBILITY (GEARS COLOR)
+local function updatePresetVisibility()
+    local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
+    for _, panel in ipairs(adminPanels) do
+        if panel and panel.Parent then
+            if isGreen and not removedPresets[panel] then
+                panel.Visible = true
+            else
+                panel.Visible = false
+            end
+        end
+    end
+end
+
+gearsButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+    updatePresetVisibility()
+end)
+
+updatePresetVisibility()
 
 --// ACCEPT STATE
 local function getAcceptState()
@@ -428,7 +461,9 @@ local function createAdminPanel(preset)
 
     clone.Name = "AdminPanel"
     clone.Parent = scrollingFrame
-    clone.Visible = true
+
+    -- Only show if gears is green
+    clone.Visible = (gearsButton.BackgroundColor3 == requiredColor)
 
     local spacer = clone:WaitForChild("Spacer")
 
@@ -573,6 +608,9 @@ yesButton.MouseButton1Click:Connect(function()
     warningTemplate.Visible = false
     confirmationUI.Enabled = false
 
+    resetHover(yesButton)
+    resetHover(noButton)
+
     playSound("rbxassetid://83245966620103",0.5)
 
     if pendingPanel and pendingPanel.Parent then
@@ -604,6 +642,9 @@ noButton.MouseButton1Click:Connect(function()
 
     warningTemplate.Visible = false
     confirmationUI.Enabled = false
+
+    resetHover(yesButton)
+    resetHover(noButton)
 
     playSound("rbxassetid://126210834885859",0.5)
 
@@ -758,22 +799,6 @@ buttonsHolder.Size = UDim2.new(1,-20,0,300)
 
 local grid = Instance.new("UIGridLayout")
 grid.Parent = buttonsHolder
-
--- Remove the hiding of things containing "Selection" and ensure they remain visible
-task.spawn(function()
-    while true do
-        pcall(function()
-            if scrollingFrame and scrollingFrame.Visible then
-                for _, obj in ipairs(scrollingFrame:GetChildren()) do
-                    if string.find(obj.Name, "Selection") then
-                        obj.Visible = true
-                    end
-                end
-            end
-        end)
-        task.wait(0.5)
-    end
-end)
 
 grid.CellSize = UDim2.new(0,60,0,60)
 grid.CellPadding = UDim2.new(0,6,0,6)
@@ -1244,6 +1269,9 @@ RunService.Heartbeat:Connect(function()
         warningTemplate.Visible = false
         confirmationUI.Enabled = false
         pendingPanel = nil
+
+        resetHover(yesButton)
+        resetHover(noButton)
     end
 
     local other = tradeUI:FindFirstChild("Other")

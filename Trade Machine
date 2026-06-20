@@ -762,24 +762,6 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 
 neonText(title)
 
-local minimize = Instance.new("TextButton")
-minimize.Parent = topBar
-
-minimize.Size = UDim2.new(0,28,0,28)
-minimize.Position = UDim2.new(1,-72,0.5,-14)
-
-minimize.Text = "-"
-minimize.Font = Enum.Font.GothamBlack
-minimize.TextSize = 22
-minimize.TextColor3 = Color3.new(1,1,1)
-
-minimize.BackgroundColor3 = neonPurple
-
-neonText(minimize)
-
-local minCorner = Instance.new("UICorner")
-minCorner.Parent = minimize
-
 local closeButton = Instance.new("TextButton")
 closeButton.Parent = topBar
 
@@ -1129,51 +1111,6 @@ website.MouseButton1Click:Connect(function()
         "Copied to clipboard!",
         Color3.fromRGB(255,255,0)
     )
-end)
-
-local minimized = false
-
-minimize.MouseButton1Click:Connect(function()
-
-    minimized = not minimized
-
-    if minimized then
-
-        minimize.Text = "+"
-
-        TweenService:Create(
-            frame,
-            TweenInfo.new(0.25,Enum.EasingStyle.Quint),
-            {
-                Size = UDim2.new(0,340,0,45)
-            }
-        ):Play()
-
-        buttonsHolder.Visible = false
-        toggleHolder.Visible = false
-        autoText.Visible = false
-        website.Visible = false
-        speedBox.Visible = false
-        keybindButton.Visible = false
-
-    else
-
-        minimize.Text = "-"
-
-        toggleHolder.Visible = true
-        autoText.Visible = true
-        website.Visible = true
-        speedBox.Visible = true
-        keybindButton.Visible = true
-
-        TweenService:Create(
-            frame,
-            TweenInfo.new(0.25,Enum.EasingStyle.Quint),
-            {
-                Size = UDim2.new(0,340,0,430)
-            }
-        ):Play()
-    end
 end)
 
 UIS.InputBegan:Connect(function(input,gpe)

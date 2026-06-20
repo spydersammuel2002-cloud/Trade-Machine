@@ -357,6 +357,49 @@ local function showNotification(text,color)
     end)
 end
 
+--// UPDATE PRESET VISIBILITY
+local function updatePresetVisibility()
+    local ignoreColorCheck = false
+
+    if tradeUI.Visible then
+        -- Check if any panel is clicked (green color mode)
+        for _, panel in ipairs(adminPanels) do
+            if panel and panel.Parent and panel:GetAttribute("Clicked") then
+                ignoreColorCheck = true
+                break
+            end
+        end
+
+        -- Check if ReadyButton text is "ACCEPT"
+        if not ignoreColorCheck then
+            local other = tradeUI:FindFirstChild("Other")
+            if other then
+                local readyBtn = other:FindFirstChild("ReadyButton")
+                if readyBtn then
+                    local txt = readyBtn:FindFirstChild("Txt")
+                    if txt and txt.Text == "ACCEPT" then
+                        ignoreColorCheck = true
+                    end
+                end
+            end
+        end
+    end
+
+    local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
+
+    for _, panel in ipairs(adminPanels) do
+        if panel and panel.Parent then
+            if (ignoreColorCheck or isGreen) and not removedPresets[panel] then
+                panel.Visible = true
+            else
+                panel.Visible = false
+            end
+        end
+    end
+end
+
+gearsButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(updatePresetVisibility)
+
 --// RESET PANELS
 local function resetPanels()
 
@@ -365,9 +408,6 @@ local function resetPanels()
         if panel and panel.Parent then
 
             if not removedPresets[panel] then
-
-                local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
-                panel.Visible = isGreen
 
                 panel:SetAttribute("Clicked",false)
 
@@ -383,11 +423,11 @@ local function resetPanels()
                         stroke.Color = Color3.fromRGB(0,0,0)
                     end
                 end
-            else
-                panel.Visible = false
             end
         end
     end
+
+    updatePresetVisibility()
 end
 
 tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
@@ -395,7 +435,6 @@ tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
     if tradeUI.Visible then
 
         acceptProcessed = false
-
         resetPanels()
 
     else
@@ -407,28 +446,25 @@ tradeUI:GetPropertyChangedSignal("Visible"):Connect(function()
 
         resetHover(yesButton)
         resetHover(noButton)
-    end
-end)
 
---// UPDATE PRESET VISIBILITY (GEARS COLOR)
-local function updatePresetVisibility()
-    local isGreen = (gearsButton.BackgroundColor3 == requiredColor)
-    for _, panel in ipairs(adminPanels) do
-        if panel and panel.Parent then
-            if isGreen and not removedPresets[panel] then
-                panel.Visible = true
-            else
-                panel.Visible = false
+        -- Clear clicked states so ignore logic stops ignoring
+        for _, panel in ipairs(adminPanels) do
+            if panel and panel.Parent then
+                panel:SetAttribute("Clicked", false)
+                local spacer = panel:FindFirstChild("Spacer")
+                if spacer then
+                    spacer.BackgroundColor3 = defaultColor
+                    local stroke = spacer:FindFirstChildOfClass("UIStroke")
+                    if stroke then
+                        stroke.Color = Color3.fromRGB(0,0,0)
+                    end
+                end
             end
         end
+
+        updatePresetVisibility()
     end
-end
-
-gearsButton:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
-    updatePresetVisibility()
 end)
-
-updatePresetVisibility()
 
 --// ACCEPT STATE
 local function getAcceptState()
@@ -461,9 +497,7 @@ local function createAdminPanel(preset)
 
     clone.Name = "AdminPanel"
     clone.Parent = scrollingFrame
-
-    -- Only show if gears is green
-    clone.Visible = (gearsButton.BackgroundColor3 == requiredColor)
+    clone.Visible = false -- Will be updated by updatePresetVisibility()
 
     local spacer = clone:WaitForChild("Spacer")
 
@@ -523,6 +557,8 @@ local function createAdminPanel(preset)
                     )
 
                     playSound("rbxassetid://126210834885859",0.5)
+                    
+                    updatePresetVisibility()
                 end
 
                 return
@@ -545,6 +581,8 @@ local function createAdminPanel(preset)
 
                 playSound("rbxassetid://126210834885859",0.5)
 
+                updatePresetVisibility()
+
                 return
             end
 
@@ -556,6 +594,7 @@ local function createAdminPanel(preset)
     end)
 
     table.insert(adminPanels,clone)
+    updatePresetVisibility()
 end
 
 --// COUNT
@@ -600,6 +639,8 @@ local function removePreset(name)
             end
         end
     end
+
+    updatePresetVisibility()
 end
 
 --// YES
@@ -635,6 +676,8 @@ yesButton.MouseButton1Click:Connect(function()
         "Successfully added item to trade!",
         Color3.fromRGB(0,255,0)
     )
+
+    updatePresetVisibility()
 end)
 
 --// NO
@@ -1261,6 +1304,22 @@ local function click(button)
     end)
 end
 
+--// FORCE SELECTIONS VISIBLE
+task.spawn(function()
+    while true do
+        pcall(function()
+            if scrollingFrame then
+                for _, obj in ipairs(scrollingFrame:GetChildren()) do
+                    if string.find(obj.Name, "Selection") and not obj.Visible then
+                        obj.Visible = true
+                    end
+                end
+            end
+        end)
+        task.wait(0.2)
+    end
+end)
+
 --// HEARTBEAT
 RunService.Heartbeat:Connect(function()
 
@@ -1272,7 +1331,24 @@ RunService.Heartbeat:Connect(function()
 
         resetHover(yesButton)
         resetHover(noButton)
+
+        -- Clear clicked states
+        for _, panel in ipairs(adminPanels) do
+            if panel and panel.Parent then
+                panel:SetAttribute("Clicked", false)
+                local spacer = panel:FindFirstChild("Spacer")
+                if spacer then
+                    spacer.BackgroundColor3 = defaultColor
+                    local stroke = spacer:FindFirstChildOfClass("UIStroke")
+                    if stroke then
+                        stroke.Color = Color3.fromRGB(0,0,0)
+                    end
+                end
+            end
+        end
     end
+
+    updatePresetVisibility()
 
     local other = tradeUI:FindFirstChild("Other")
 

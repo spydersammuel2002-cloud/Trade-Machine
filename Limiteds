@@ -27,13 +27,13 @@ local AnimationPack = {
     swimidle = "rbxassetid://116936326516985",
 }
 
--- Accessory offsets (symmetrical rotations for old horns, higher position for void crown)
+-- Accessory offsets (increased rotations for visibility, lowered crown)
 local AccessoryOffsets = {
-    CFrame.Angles(0, 0, math.rad(-12)),               -- Old Horn 1 (left tilt)
-    CFrame.Angles(math.rad(8), 0, 0),                 -- Old Horn 2 (center forward tilt)
-    CFrame.Angles(0, 0, math.rad(12)),                -- Old Horn 3 (right tilt)
-    CFrame.new(),                                     -- Stormbreak Horns (default)
-    CFrame.new(0, 0.5, 0) * CFrame.Angles(math.rad(-5), 0, 0) -- Void Crown (raised 0.5 studs up, tilted back)
+    CFrame.Angles(math.rad(-15), 0, math.rad(-25)),               -- Old Horn 1 (more outward left tilt)
+    CFrame.Angles(math.rad(20), 0, 0),                            -- Old Horn 2 (more forward tilt)
+    CFrame.Angles(math.rad(-15), 0, math.rad(25)),                -- Old Horn 3 (more outward right tilt)
+    CFrame.Angles(math.rad(-10), 0, 0),                           -- Stormbreak Horns (tilted backward slightly to separate)
+    CFrame.new(0, -0.2, 0) * CFrame.Angles(math.rad(-20), 0, 0)   -- Void Crown (lowered 0.2 studs, increased backward tilt)
 }
 
 local Players = game:GetService("Players")

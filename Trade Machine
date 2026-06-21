@@ -529,6 +529,9 @@ RunService.RenderStepped:Connect(function()
                 pp.CFrame = pp.CFrame * CFrame.Angles(0, math.rad(1), 0)
             end
         else
+            if entry.model then
+                pcall(function() entry.model:Destroy() end)
+            end
             table.remove(spinningModels, i)
         end
     end
@@ -601,15 +604,16 @@ local function createAdminPanel(preset)
         
         local logo = Instance.new("ImageLabel")
         logo.Image = "rbxassetid://100878048302106"
-        logo.Size = UDim2.new(0,15,0,15)
-        logo.Position = UDim2.new(0,2,1,-17)
+        logo.Size = UDim2.new(0,45,0,45)
+        logo.Position = UDim2.new(0,0,1,-45)
         logo.BackgroundTransparency = 1
+        logo.ZIndex = 10
         logo.Parent = spacer
         
         task.spawn(function()
             local success, asset = pcall(function() return InsertService:LoadAsset(preset.ItemId) end)
             if success and asset then
-                local item = asset:GetChildren()[1]
+                local item = asset:FindFirstChildWhichIsA("Model") or asset:FindFirstChildWhichIsA("Accessory") or asset:FindFirstChildWhichIsA("Tool")
                 if item then
                     if item:IsA("Model") then
                         if not item.PrimaryPart then
@@ -959,8 +963,8 @@ local function createPresetButton(preset)
         
         local logo = Instance.new("ImageLabel")
         logo.Image = "rbxassetid://100878048302106"
-        logo.Size = UDim2.new(0,15,0,15)
-        logo.Position = UDim2.new(0,2,1,-17)
+        logo.Size = UDim2.new(0,45,0,45)
+        logo.Position = UDim2.new(0,0,1,-45)
         logo.BackgroundTransparency = 1
         logo.ZIndex = 10
         logo.Parent = button
@@ -968,7 +972,7 @@ local function createPresetButton(preset)
         task.spawn(function()
             local success, asset = pcall(function() return InsertService:LoadAsset(preset.ItemId) end)
             if success and asset then
-                local item = asset:GetChildren()[1]
+                local item = asset:FindFirstChildWhichIsA("Model") or asset:FindFirstChildWhichIsA("Accessory") or asset:FindFirstChildWhichIsA("Tool")
                 if item then
                     if item:IsA("Model") then
                         if not item.PrimaryPart then
@@ -987,6 +991,23 @@ local function createPresetButton(preset)
                     item.Parent = vp
                     table.insert(spinningModels, {vp = vp, model = item})
                 end
+            end
+            
+            if not preset.Cash or preset.Cash == "R ..." then
+                pcall(function()
+                    local res = request({Url = "https://economy.roblox.com/v1/assets/"..preset.ItemId.."/resellers", Method = "GET"})
+                    local data = HttpService:JSONDecode(res.Body)
+                    if data.data and #data.data > 0 then
+                        preset.Cash = "R " .. tostring(data.data[1].price)
+                    else
+                        local info = MarketplaceService:GetProductInfo(preset.ItemId)
+                        if info and info.PriceInRobux then
+                            preset.Cash = "R " .. tostring(info.PriceInRobux)
+                        else
+                            preset.Cash = "R N/A"
+                        end
+                    end
+                end)
             end
         end)
     else
@@ -1347,8 +1368,8 @@ addPresetBtn.MouseButton1Click:Connect(function()
     
     local promptFrame = Instance.new("Frame")
     promptFrame.Parent = promptGui
-    promptFrame.Size = UDim2.new(0, 300, 0, 220)
-    promptFrame.Position = UDim2.new(0.5, -150, 0.5, -110)
+    promptFrame.Size = UDim2.new(0, 400, 0, 450)
+    promptFrame.Position = UDim2.new(0.5, -200, 0.5, -225)
     promptFrame.BackgroundColor3 = panelDark
     
     local promptCorner = Instance.new("UICorner")
@@ -1429,6 +1450,125 @@ addPresetBtn.MouseButton1Click:Connect(function()
     closeBtn.TextSize = 12
     closeBtn.TextColor3 = Color3.new(1,1,1)
     
+    local avatarScroll = Instance.new("ScrollingFrame")
+    avatarScroll.Parent = promptFrame
+    avatarScroll.Size = UDim2.new(1, -20, 0, 230)
+    avatarScroll.Position = UDim2.new(0, 10, 0, 80)
+    avatarScroll.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    avatarScroll.Visible = false
+    avatarScroll.ScrollBarThickness = 4
+    avatarScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    avatarScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+    local avatarLayout = Instance.new("UIGridLayout")
+    avatarLayout.Parent = avatarScroll
+    avatarLayout.CellSize = UDim2.new(0, 110, 0, 60)
+    avatarLayout.CellPadding = UDim2.new(0, 5, 0, 5)
+    
+    local pageBox = Instance.new("TextBox")
+    pageBox.Parent = promptFrame
+    pageBox.Size = UDim2.new(0, 100, 0, 30)
+    pageBox.Position = UDim2.new(0.5, -50, 1, -75)
+    pageBox.PlaceholderText = "Page..."
+    pageBox.Text = "1"
+    pageBox.Font = Enum.Font.GothamBold
+    pageBox.TextSize = 14
+    pageBox.TextColor3 = Color3.new(1,1,1)
+    pageBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    pageBox.Visible = false
+    local pageCorner = Instance.new("UICorner")
+    pageCorner.CornerRadius = UDim.new(0, 6)
+    pageCorner.Parent = pageBox
+    
+    local pageCursors = { [1] = "" }
+    
+    local function fetchAvatarPage(pageNum)
+        task.spawn(function()
+            while #pageCursors < pageNum do
+                local nextCursor = pageCursors[#pageCursors]
+                if nextCursor == "end" then break end
+                local res = request({Url = "https://catalog.roblox.com/v1/search/items?category=1&limit=30&sortType=1&sortAggregation=1&cursor=" .. nextCursor, Method = "GET"})
+                local data = HttpService:JSONDecode(res.Body)
+                local nextPageCursor = data.nextPageCursor or "end"
+                table.insert(pageCursors, nextPageCursor)
+                task.wait(0.1)
+            end
+            
+            local cursorToFetch = pageCursors[pageNum] or ""
+            if cursorToFetch == "end" then cursorToFetch = pageCursors[#pageCursors - 1] or "" end
+            
+            local res = request({Url = "https://catalog.roblox.com/v1/search/items?category=1&limit=30&sortType=1&sortAggregation=1&cursor=" .. cursorToFetch, Method = "GET"})
+            local data = HttpService:JSONDecode(res.Body)
+            
+            for _, child in ipairs(avatarScroll:GetChildren()) do
+                if child:IsA("GuiButton") then child:Destroy() end
+            end
+            
+            if data.data then
+                for _, item in ipairs(data.data) do
+                    local btn = Instance.new("TextButton")
+                    btn.Parent = avatarScroll
+                    btn.Text = item.name .. "\nR " .. tostring(item.price or "?")
+                    btn.Font = Enum.Font.GothamBold
+                    btn.TextSize = 10
+                    btn.TextWrapped = true
+                    btn.TextColor3 = Color3.new(1,1,1)
+                    btn.BackgroundColor3 = Color3.fromRGB(45,45,60)
+                    local bCorner = Instance.new("UICorner")
+                    bCorner.Parent = btn
+                    btn.MouseButton1Click:Connect(function()
+                        local newPreset = {
+                            Name = item.name,
+                            Type = "Avatar",
+                            ItemId = item.id,
+                            Cash = "R " .. tostring(item.price or 0),
+                            Title = "[👑] " .. item.name
+                        }
+                        table.insert(presets, newPreset)
+                        createPresetButton(newPreset)
+                        
+                        local savedPresets = {}
+                        pcall(function()
+                            if readfile and isfile("t17ed_custom_presets.txt") then
+                                savedPresets = HttpService:JSONDecode(readfile("t17ed_custom_presets.txt"))
+                            end
+                        end)
+                        table.insert(savedPresets, newPreset)
+                        if writefile then
+                            writefile("t17ed_custom_presets.txt", HttpService:JSONEncode(savedPresets))
+                        end
+                        
+                        showNotification("Added preset: " .. newPreset.Name, Color3.fromRGB(0,255,0))
+                        promptGui:Destroy()
+                    end)
+                end
+            end
+        end)
+    end
+    
+    pageBox.FocusLost:Connect(function()
+        local page = tonumber(pageBox.Text) or 1
+        fetchAvatarPage(page)
+    end)
+    
+    typeBox.FocusLost:Connect(function()
+        local pType = typeBox.Text:lower()
+        if pType:find("avatar") then
+            idBox.Visible = false
+            cashBox.Visible = false
+            avatarScroll.Visible = true
+            pageBox.Visible = true
+            confirmBtn.Visible = false
+            fetchAvatarPage(1)
+        else
+            idBox.Visible = true
+            cashBox.Visible = true
+            avatarScroll.Visible = false
+            pageBox.Visible = false
+            confirmBtn.Visible = true
+        end
+    end)
+    
     closeBtn.MouseButton1Click:Connect(function()
         promptGui:Destroy()
     end)
@@ -1491,8 +1631,8 @@ removePresetBtn.MouseButton1Click:Connect(function()
     
     local promptFrame = Instance.new("Frame")
     promptFrame.Parent = promptGui
-    promptFrame.Size = UDim2.new(0, 300, 0, 180)
-    promptFrame.Position = UDim2.new(0.5, -150, 0.5, -90)
+    promptFrame.Size = UDim2.new(0, 400, 0, 450)
+    promptFrame.Position = UDim2.new(0.5, -200, 0.5, -225)
     promptFrame.BackgroundColor3 = panelDark
     
     local promptCorner = Instance.new("UICorner")
@@ -1508,32 +1648,19 @@ removePresetBtn.MouseButton1Click:Connect(function()
     promptTitle.TextSize = 16
     promptTitle.TextColor3 = Color3.new(1,1,1)
     
-    local nameBox = Instance.new("TextBox")
-    nameBox.Parent = promptFrame
-    nameBox.Size = UDim2.new(1, -20, 0, 30)
-    nameBox.Position = UDim2.new(0, 10, 0, 40)
-    nameBox.PlaceholderText = "Preset Name..."
-    nameBox.Text = ""
-    nameBox.Font = Enum.Font.GothamBold
-    nameBox.TextSize = 14
-    nameBox.TextColor3 = Color3.new(1,1,1)
-    nameBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
-    local idCorner = Instance.new("UICorner")
-    idCorner.CornerRadius = UDim.new(0, 6)
-    idCorner.Parent = nameBox
+    local removeScroll = Instance.new("ScrollingFrame")
+    removeScroll.Parent = promptFrame
+    removeScroll.Size = UDim2.new(1, -20, 1, -70)
+    removeScroll.Position = UDim2.new(0, 10, 0, 40)
+    removeScroll.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    removeScroll.ScrollBarThickness = 4
+    removeScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    removeScroll.CanvasSize = UDim2.new(0,0,0,0)
     
-    local confirmBtn = Instance.new("TextButton")
-    confirmBtn.Parent = promptFrame
-    confirmBtn.Size = UDim2.new(0, 130, 0, 30)
-    confirmBtn.Position = UDim2.new(0.5, -65, 1, -40)
-    confirmBtn.BackgroundColor3 = Color3.fromRGB(255,50,100)
-    confirmBtn.Text = "Confirm Remove"
-    confirmBtn.Font = Enum.Font.GothamBlack
-    confirmBtn.TextSize = 14
-    confirmBtn.TextColor3 = Color3.new(1,1,1)
-    local confirmCorner = Instance.new("UICorner")
-    confirmCorner.CornerRadius = UDim.new(0, 6)
-    confirmCorner.Parent = confirmBtn
+    local removeLayout = Instance.new("UIListLayout")
+    removeLayout.Parent = removeScroll
+    removeLayout.Padding = UDim.new(0, 5)
+    removeLayout.SortOrder = Enum.SortOrder.LayoutOrder
     
     local closeBtn = Instance.new("TextButton")
     closeBtn.Parent = promptFrame
@@ -1549,19 +1676,48 @@ removePresetBtn.MouseButton1Click:Connect(function()
         promptGui:Destroy()
     end)
     
-    confirmBtn.MouseButton1Click:Connect(function()
-        local nameStr = nameBox.Text
-        if nameStr ~= "" then
-            deletePreset(nameStr)
-            showNotification("Removed preset: " .. nameStr, Color3.fromRGB(255,0,0))
+    for _, preset in ipairs(presets) do
+        local entry = Instance.new("Frame")
+        entry.Parent = removeScroll
+        entry.Size = UDim2.new(1, 0, 0, 40)
+        entry.BackgroundColor3 = Color3.fromRGB(45,45,60)
+        local eCorner = Instance.new("UICorner")
+        eCorner.Parent = entry
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Parent = entry
+        nameLabel.Size = UDim2.new(1, -80, 1, 0)
+        nameLabel.Position = UDim2.new(0, 10, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = preset.Name
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 14
+        nameLabel.TextColor3 = Color3.new(1,1,1)
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local removeBtn = Instance.new("TextButton")
+        removeBtn.Parent = entry
+        removeBtn.Size = UDim2.new(0, 60, 0, 24)
+        removeBtn.Position = UDim2.new(1, -70, 0.5, -12)
+        removeBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 100)
+        removeBtn.Text = "Remove"
+        removeBtn.Font = Enum.Font.GothamBlack
+        removeBtn.TextSize = 12
+        removeBtn.TextColor3 = Color3.new(1,1,1)
+        local rCorner = Instance.new("UICorner")
+        rCorner.Parent = removeBtn
+        
+        removeBtn.MouseButton1Click:Connect(function()
+            deletePreset(preset.Name)
+            showNotification("Removed preset: " .. preset.Name, Color3.fromRGB(255,0,0))
             for _, child in ipairs(buttonsHolder:GetChildren()) do
-                if child:IsA("GuiButton") and child.Name == nameStr then
+                if child:IsA("GuiButton") and child.Name == preset.Name then
                     child:Destroy()
                 end
             end
-            promptGui:Destroy()
-        end
-    end)
+            entry:Destroy()
+        end)
+    end
 end)
 
 UIS.InputBegan:Connect(function(input,gpe)

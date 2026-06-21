@@ -1,11 +1,9 @@
 getgenv().Time = 0.1
 
--- Accessories (Old Horns, New Horns)
 getgenv().Head = {
-    215718515,      -- Old Horn 1
-    74891470,       -- Old Horn 2
-    1744060292,     -- Old Horn 3
-    76479271580913  -- Stormbreak Horns of the Tempest Skies
+    215718515,
+    74891470,
+    1744060292
 }
 
 getgenv().Torso = {
@@ -27,12 +25,11 @@ local AnimationPack = {
     swimidle = "rbxassetid://116936326516985",
 }
 
--- Accessory offsets (increased rotations for visibility)
-local AccessoryOffsets = {
-    CFrame.Angles(math.rad(-15), 0, math.rad(-25)),  -- Old Horn 1 (more outward left tilt)
-    CFrame.Angles(math.rad(20), 0, 0),               -- Old Horn 2 (more forward tilt)
-    CFrame.Angles(math.rad(-15), 0, math.rad(25)),   -- Old Horn 3 (more outward right tilt)
-    CFrame.Angles(math.rad(-10), 0, 0)               -- Stormbreak Horns (tilted backward slightly to separate)
+-- Horn rotation offsets (symmetrical: side horns tilt outward, middle tilts forward)
+local HornRotations = {
+    CFrame.Angles(0, 0, math.rad(-12)),  -- left horn tilts left
+    CFrame.Angles(math.rad(8), 0, 0),    -- middle horn tilts forward slightly
+    CFrame.Angles(0, 0, math.rad(12)),   -- right horn tilts right
 }
 
 local Players = game:GetService("Players")
@@ -88,7 +85,7 @@ local function safeGetObjects(assetId)
     return nil
 end
 
-local function addAccessoryToCharacter(accessoryId, parentPart, character, offset)
+local function addAccessoryToCharacter(accessoryId, parentPart, character, rotationOffset)
     if not parentPart or not parentPart.Parent then
         return
     end
@@ -126,19 +123,19 @@ local function addAccessoryToCharacter(accessoryId, parentPart, character, offse
         local parentAttachment = findAttachment(parentPart, attachment.Name)
 
         if parentAttachment then
-            weldParts(parentPart, handle, parentAttachment.CFrame * (offset or CFrame.new()), attachment.CFrame)
+            weldParts(parentPart, handle, parentAttachment.CFrame * (rotationOffset or CFrame.new()), attachment.CFrame)
         else
-            weldParts(parentPart, handle, (offset or CFrame.new()), attachment.CFrame)
+            weldParts(parentPart, handle, (rotationOffset or CFrame.new()), attachment.CFrame)
         end
     else
         local attachmentPoint = accessory:FindFirstChild("AttachmentPoint")
         local c1 = attachmentPoint and attachmentPoint.CFrame or CFrame.new()
 
-        local baseOffset = parentPart.Name == "Head"
-            and CFrame.new(0, 0.5, 0)
-            or CFrame.new()
+        local offset = parentPart.Name == "Head"
+            and CFrame.new(0, 0.5, 0) * (rotationOffset or CFrame.new())
+            or (rotationOffset or CFrame.new())
 
-        weldParts(parentPart, handle, baseOffset * (offset or CFrame.new()), c1)
+        weldParts(parentPart, handle, offset, c1)
     end
 
     handle.CanCollide = false
@@ -252,30 +249,61 @@ local function applyHeadless(character)
     end
 end
 
+-- KORBLOX WITH ACTUAL MESH
 local function applyKorblox(character)
     if not getgenv().KorbloxLeg then
         return
     end
 
-    local rightLegR6 = character:FindFirstChild("Right Leg")
-    local rightUpperLeg = character:FindFirstChild("RightUpperLeg")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoid then
+        return
+    end
+
     local rightLowerLeg = character:FindFirstChild("RightLowerLeg")
+    local rightUpperLeg = character:FindFirstChild("RightUpperLeg")
     local rightFoot = character:FindFirstChild("RightFoot")
+    local rightLegR6 = character:FindFirstChild("Right Leg")
+
+    -- Remove existing korblox part if any
+    local existingKorblox = character:FindFirstChild("KorbloxMeshPart")
+    if existingKorblox then
+        existingKorblox:Destroy()
+    end
 
     -- R6 SUPPORT
     if rightLegR6 then
         rightLegR6.Transparency = 1
-        
+
+        -- remove default mesh
         for _, v in pairs(rightLegR6:GetChildren()) do
             if v:IsA("SpecialMesh") then
                 v:Destroy()
             end
         end
 
-        -- Attach the catalog accessory to the R6 leg
-        task.spawn(function()
-            addAccessoryToCharacter(139607718, rightLegR6, character, CFrame.new())
-        end)
+        -- create korblox mesh part
+        local korbloxPart = Instance.new("Part")
+        korbloxPart.Name = "KorbloxMeshPart"
+        korbloxPart.Size = Vector3.new(1, 2, 1)
+        korbloxPart.CanCollide = false
+        korbloxPart.Massless = true
+        korbloxPart.Anchored = false
+        korbloxPart.Transparency = 0
+        korbloxPart.Color = Color3.fromRGB(45, 45, 55)
+        korbloxPart.Material = Enum.Material.Metal
+        korbloxPart.Parent = character
+
+        local mesh = Instance.new("SpecialMesh")
+        mesh.MeshId = "rbxasset://139607718"
+        mesh.TextureId = ""
+        mesh.Scale = Vector3.new(1, 1, 1)
+        mesh.Parent = korbloxPart
+
+        weldParts(rightLegR6, korbloxPart, CFrame.new(0, 0, 0), CFrame.new(0, 0, 0))
+
+        activeAccessories["korblox_" .. character.Name] = korbloxPart
         return
     end
 
@@ -286,7 +314,8 @@ local function applyKorblox(character)
 
     if rightLowerLeg then
         rightLowerLeg.Transparency = 1
-        
+
+        -- remove existing mesh
         for _, v in pairs(rightLowerLeg:GetChildren()) do
             if v:IsA("SpecialMesh") then
                 v:Destroy()
@@ -296,8 +325,7 @@ local function applyKorblox(character)
 
     if rightFoot then
         rightFoot.Transparency = 1
-        rightFoot.Size = Vector3.new(0.05, 0.05, 0.05)
-        
+
         for _, v in pairs(rightFoot:GetChildren()) do
             if v:IsA("SpecialMesh") then
                 v:Destroy()
@@ -305,12 +333,36 @@ local function applyKorblox(character)
         end
     end
 
-    -- Attach the catalog accessory to the R15 leg (uses native RightLowerLegAttachment)
+    -- create korblox mesh part anchored to right lower leg
     local anchorPart = rightLowerLeg or rightUpperLeg
+
     if anchorPart then
-        task.spawn(function()
-            addAccessoryToCharacter(139607718, anchorPart, character, CFrame.new())
-        end)
+        local korbloxPart = Instance.new("Part")
+        korbloxPart.Name = "KorbloxMeshPart"
+        korbloxPart.Size = Vector3.new(1, 3, 1)
+        korbloxPart.CanCollide = false
+        korbloxPart.Massless = true
+        korbloxPart.Anchored = false
+        korbloxPart.Transparency = 0
+        korbloxPart.Color = Color3.fromRGB(45, 45, 55)
+        korbloxPart.Material = Enum.Material.Metal
+        korbloxPart.Parent = character
+
+        local mesh = Instance.new("SpecialMesh")
+        mesh.MeshId = "rbxasset://139607718"
+        mesh.TextureId = ""
+        mesh.Scale = Vector3.new(1, 1, 1)
+        mesh.Parent = korbloxPart
+
+        -- offset so the mesh aligns with the leg
+        local weldC0 = CFrame.new(0, -0.5, 0)
+        if rightLowerLeg then
+            weldC0 = CFrame.new(0, 0, 0)
+        end
+
+        weldParts(anchorPart, korbloxPart, weldC0, CFrame.new(0, 0, 0))
+
+        activeAccessories["korblox_" .. character.Name] = korbloxPart
     end
 end
 
@@ -386,9 +438,9 @@ local function onCharacterAdded(character)
 
     for index, accessoryId in ipairs(getgenv().Head) do
         if accessoryId and accessoryId ~= 0 then
-            local offset = AccessoryOffsets[index] or CFrame.new()
+            local rot = HornRotations[index] or CFrame.new()
             task.spawn(function()
-                addAccessoryToCharacter(accessoryId, head, character, offset)
+                addAccessoryToCharacter(accessoryId, head, character, rot)
             end)
         end
     end

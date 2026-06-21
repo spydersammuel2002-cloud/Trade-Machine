@@ -3,6 +3,9 @@ local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local InsertService = game:GetService("InsertService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -163,7 +166,24 @@ local presets = {
         Cash = "4,670,000",
         Title = "[🎁] Spyder Chain"
     },
+    {
+        Name = "Valk Helm",
+        Type = "Avatar",
+        ItemId = 136576262,
+        Cash = "R 50,000",
+        Title = "[👑] Valkyrie Helm"
+    }
 }
+
+-- Load saved custom gamepass presets
+pcall(function()
+    if readfile and isfile("t17ed_custom_presets.txt") then
+        local savedPresets = HttpService:JSONDecode(readfile("t17ed_custom_presets.txt"))
+        for _, p in ipairs(savedPresets) do
+            table.insert(presets, p)
+        end
+    end
+end)
 
 local function playSound(id, volume)
     local sound = Instance.new("Sound")
@@ -545,7 +565,75 @@ local function createAdminPanel(preset)
         img.Position = UDim2.new(0.25,0,0.25,0)
     end
 
-    img.Image = preset.Image
+    if preset.Type == "Avatar" then
+        img.Visible = false
+        
+        local vp = Instance.new("ViewportFrame")
+        vp.Name = "CustomViewport"
+        vp.Parent = spacer
+        vp.Size = UDim2.new(1,0,1,0)
+        vp.BackgroundTransparency = 1
+        
+        local vpCam = Instance.new("Camera")
+        vpCam.CFrame = CFrame.new(Vector3.new(0, 3, 6), Vector3.new(0, 0, 0))
+        vp.CurrentCamera = vpCam
+        vpCam.Parent = vp
+        
+        local vpModel
+        task.spawn(function()
+            local success, asset = pcall(function() return InsertService:LoadAsset(preset.ItemId) end)
+            if success and asset then
+                local item = asset:GetChildren()[1]
+                if item then
+                    if item:IsA("Model") then
+                        if not item.PrimaryPart then
+                            local pp = item:FindFirstChildWhichIsA("BasePart")
+                            if pp then item.PrimaryPart = pp end
+                        end
+                        if item.PrimaryPart then
+                            item:SetPrimaryPartCFrame(CFrame.new(0,0,0))
+                        end
+                    elseif item:IsA("Accessory") or item:IsA("Tool") then
+                        local pp = item:FindFirstChildWhichIsA("BasePart")
+                        if pp then
+                            pp.CFrame = CFrame.new(0,0,0)
+                        end
+                    end
+                    item.Parent = vp
+                    vpModel = item
+                end
+            end
+            
+            pcall(function()
+                local res = request({Url = "https://economy.roblox.com/v1/assets/"..preset.ItemId.."/resellers", Method = "GET"})
+                local data = HttpService:JSONDecode(res.Body)
+                if data.data and #data.data > 0 then
+                    cash.Text = "R " .. tostring(data.data[1].price)
+                else
+                    local info = MarketplaceService:GetProductInfo(preset.ItemId)
+                    if info and info.PriceInRobux then
+                        cash.Text = "R " .. tostring(info.PriceInRobux)
+                    else
+                        cash.Text = "R N/A"
+                    end
+                end
+            end)
+        end)
+        
+        RunService.RenderStepped:Connect(function()
+            if vpModel and vp.Parent then
+                if vpModel:IsA("Model") and vpModel.PrimaryPart then
+                    vpModel:SetPrimaryPartCFrame(vpModel:GetPrimaryPartCFrame() * CFrame.Angles(0, math.rad(1), 0))
+                elseif (vpModel:IsA("Accessory") or vpModel:IsA("Tool")) and vpModel:FindFirstChildWhichIsA("BasePart") then
+                    local pp = vpModel:FindFirstChildWhichIsA("BasePart")
+                    pp.CFrame = pp.CFrame * CFrame.Angles(0, math.rad(1), 0)
+                end
+            end
+        end)
+    else
+        img.Visible = true
+        img.Image = preset.Image
+    end
 
     spacer.InputBegan:Connect(function(input)
 
@@ -796,12 +884,21 @@ closeButton.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
-local buttonsHolder = Instance.new("Frame")
-buttonsHolder.Parent = frame
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Parent = frame
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.BorderSizePixel = 0
+scrollFrame.Position = UDim2.new(0,10,0,55)
+scrollFrame.Size = UDim2.new(1,-20,0,300)
+scrollFrame.ScrollBarThickness = 4
+scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollFrame.CanvasSize = UDim2.new(0,0,0,0)
 
+local buttonsHolder = Instance.new("Frame")
+buttonsHolder.Parent = scrollFrame
 buttonsHolder.BackgroundTransparency = 1
-buttonsHolder.Position = UDim2.new(0,10,0,55)
-buttonsHolder.Size = UDim2.new(1,-20,0,300)
+buttonsHolder.Size = UDim2.new(1,0,0,0)
+buttonsHolder.AutomaticSize = Enum.AutomaticSize.Y
 
 local grid = Instance.new("UIGridLayout")
 grid.Parent = buttonsHolder
@@ -813,15 +910,96 @@ grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 grid.VerticalAlignment = Enum.VerticalAlignment.Top
 grid.SortOrder = Enum.SortOrder.LayoutOrder
 
-for _,preset in ipairs(presets) do
+local function updateCanvas()
+    scrollFrame.CanvasSize = UDim2.new(0,0,0,grid.AbsoluteContentSize.Y + 10)
+end
+grid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
 
-    local button = Instance.new("ImageButton")
-    button.Parent = buttonsHolder
-
-    button.Image = preset.Image
+local function createPresetButton(preset)
+    local button
+    
+    if preset.Type == "Avatar" then
+        button = Instance.new("TextButton")
+        button.Text = ""
+        button.Parent = buttonsHolder
+        
+        local vp = Instance.new("ViewportFrame")
+        vp.Parent = button
+        vp.Size = UDim2.new(1,0,1,0)
+        vp.BackgroundTransparency = 1
+        
+        local vpCam = Instance.new("Camera")
+        vpCam.CFrame = CFrame.new(Vector3.new(0, 3, 6), Vector3.new(0, 0, 0))
+        vp.CurrentCamera = vpCam
+        vpCam.Parent = vp
+        
+        local logo = Instance.new("ImageLabel")
+        logo.Image = "rbxassetid://100878048302106"
+        logo.Size = UDim2.new(0,15,0,15)
+        logo.Position = UDim2.new(0,2,1,-17)
+        logo.BackgroundTransparency = 1
+        logo.Parent = button
+        
+        local vpModel
+        task.spawn(function()
+            local success, asset = pcall(function() return InsertService:LoadAsset(preset.ItemId) end)
+            if success and asset then
+                local item = asset:GetChildren()[1]
+                if item then
+                    if item:IsA("Model") then
+                        if not item.PrimaryPart then
+                            local pp = item:FindFirstChildWhichIsA("BasePart")
+                            if pp then item.PrimaryPart = pp end
+                        end
+                        if item.PrimaryPart then
+                            item:SetPrimaryPartCFrame(CFrame.new(0,0,0))
+                        end
+                    elseif item:IsA("Accessory") or item:IsA("Tool") then
+                        local pp = item:FindFirstChildWhichIsA("BasePart")
+                        if pp then
+                            pp.CFrame = CFrame.new(0,0,0)
+                        end
+                    end
+                    item.Parent = vp
+                    vpModel = item
+                end
+            end
+            
+            pcall(function()
+                local res = request({Url = "https://economy.roblox.com/v1/assets/"..preset.ItemId.."/resellers", Method = "GET"})
+                local data = HttpService:JSONDecode(res.Body)
+                if data.data and #data.data > 0 then
+                    preset.Cash = "R " .. tostring(data.data[1].price)
+                else
+                    local info = MarketplaceService:GetProductInfo(preset.ItemId)
+                    if info and info.PriceInRobux then
+                        preset.Cash = "R " .. tostring(info.PriceInRobux)
+                    else
+                        preset.Cash = "R N/A"
+                    end
+                end
+            end)
+        end)
+        
+        RunService.RenderStepped:Connect(function()
+            if vpModel and vp.Parent then
+                if vpModel:IsA("Model") and vpModel.PrimaryPart then
+                    vpModel:SetPrimaryPartCFrame(vpModel:GetPrimaryPartCFrame() * CFrame.Angles(0, math.rad(1), 0))
+                elseif (vpModel:IsA("Accessory") or vpModel:IsA("Tool")) and vpModel:FindFirstChildWhichIsA("BasePart") then
+                    local pp = vpModel:FindFirstChildWhichIsA("BasePart")
+                    pp.CFrame = pp.CFrame * CFrame.Angles(0, math.rad(1), 0)
+                end
+            end
+        end)
+    else
+        button = Instance.new("ImageButton")
+        button.Parent = buttonsHolder
+        button.Image = preset.Image
+        button.ScaleType = Enum.ScaleType.Fit
+    end
+    
     button.BackgroundColor3 = Color3.fromRGB(45,45,60)
     button.BorderSizePixel = 0
-    button.ScaleType = Enum.ScaleType.Fit
 
     local buttonCorner = Instance.new("UICorner")
     buttonCorner.Parent = button
@@ -881,6 +1059,10 @@ for _,preset in ipairs(presets) do
     RunService.Heartbeat:Connect(function()
         counter.Text = tostring(getVisibleCount(preset.Name))
     end)
+end
+
+for _,preset in ipairs(presets) do
+    createPresetButton(preset)
 end
 
 local autoText = Instance.new("TextLabel")
@@ -1086,8 +1268,8 @@ end)
 local website = Instance.new("TextButton")
 website.Parent = frame
 
-website.Size = UDim2.new(1,0,0,24)
-website.Position = UDim2.new(0,0,1,-28)
+website.Size = UDim2.new(1,-120,0,24)
+website.Position = UDim2.new(0,10,1,-28)
 
 website.BackgroundTransparency = 1
 
@@ -1095,6 +1277,7 @@ website.Text = "t17ed.github.io"
 website.Font = Enum.Font.GothamBlack
 website.TextSize = 15
 website.TextColor3 = softPink
+website.TextXAlignment = Enum.TextXAlignment.Left
 
 neonText(website)
 
@@ -1111,6 +1294,135 @@ website.MouseButton1Click:Connect(function()
         "Copied to clipboard!",
         Color3.fromRGB(255,255,0)
     )
+end)
+
+local addPresetBtn = Instance.new("TextButton")
+addPresetBtn.Parent = frame
+addPresetBtn.Size = UDim2.new(0, 100, 0, 24)
+addPresetBtn.Position = UDim2.new(1, -110, 1, -28)
+addPresetBtn.BackgroundColor3 = neonPurple
+addPresetBtn.Text = "Add Preset"
+addPresetBtn.Font = Enum.Font.GothamBlack
+addPresetBtn.TextSize = 14
+addPresetBtn.TextColor3 = Color3.new(1,1,1)
+
+local addCorner = Instance.new("UICorner")
+addCorner.CornerRadius = UDim.new(0, 6)
+addCorner.Parent = addPresetBtn
+
+neonText(addPresetBtn)
+
+addPresetBtn.MouseButton1Click:Connect(function()
+    local promptGui = Instance.new("ScreenGui")
+    promptGui.Parent = playerGui
+    
+    local promptFrame = Instance.new("Frame")
+    promptFrame.Parent = promptGui
+    promptFrame.Size = UDim2.new(0, 300, 0, 180)
+    promptFrame.Position = UDim2.new(0.5, -150, 0.5, -90)
+    promptFrame.BackgroundColor3 = panelDark
+    
+    local promptCorner = Instance.new("UICorner")
+    promptCorner.CornerRadius = UDim.new(0, 10)
+    promptCorner.Parent = promptFrame
+    
+    local promptTitle = Instance.new("TextLabel")
+    promptTitle.Parent = promptFrame
+    promptTitle.Size = UDim2.new(1, 0, 0, 30)
+    promptTitle.BackgroundTransparency = 1
+    promptTitle.Text = "Add Gamepass Preset"
+    promptTitle.Font = Enum.Font.GothamBlack
+    promptTitle.TextSize = 16
+    promptTitle.TextColor3 = Color3.new(1,1,1)
+    
+    local idBox = Instance.new("TextBox")
+    idBox.Parent = promptFrame
+    idBox.Size = UDim2.new(1, -20, 0, 30)
+    idBox.Position = UDim2.new(0, 10, 0, 40)
+    idBox.PlaceholderText = "Gamepass ID..."
+    idBox.Text = ""
+    idBox.Font = Enum.Font.GothamBold
+    idBox.TextSize = 14
+    idBox.TextColor3 = Color3.new(1,1,1)
+    idBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    local idCorner = Instance.new("UICorner")
+    idCorner.CornerRadius = UDim.new(0, 6)
+    idCorner.Parent = idBox
+    
+    local cashBox = Instance.new("TextBox")
+    cashBox.Parent = promptFrame
+    cashBox.Size = UDim2.new(1, -20, 0, 30)
+    cashBox.Position = UDim2.new(0, 10, 0, 80)
+    cashBox.PlaceholderText = "Cash... (e.g. 499)"
+    cashBox.Text = "999"
+    cashBox.Font = Enum.Font.GothamBold
+    cashBox.TextSize = 14
+    cashBox.TextColor3 = Color3.new(1,1,1)
+    cashBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    local cashCorner = Instance.new("UICorner")
+    cashCorner.CornerRadius = UDim.new(0, 6)
+    cashCorner.Parent = cashBox
+    
+    local confirmBtn = Instance.new("TextButton")
+    confirmBtn.Parent = promptFrame
+    confirmBtn.Size = UDim2.new(0, 130, 0, 30)
+    confirmBtn.Position = UDim2.new(0.5, -65, 1, -40)
+    confirmBtn.BackgroundColor3 = neonPink
+    confirmBtn.Text = "Confirm"
+    confirmBtn.Font = Enum.Font.GothamBlack
+    confirmBtn.TextSize = 14
+    confirmBtn.TextColor3 = Color3.new(1,1,1)
+    local confirmCorner = Instance.new("UICorner")
+    confirmCorner.CornerRadius = UDim.new(0, 6)
+    confirmCorner.Parent = confirmBtn
+    
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Parent = promptFrame
+    closeBtn.Size = UDim2.new(0, 20, 0, 20)
+    closeBtn.Position = UDim2.new(1, -25, 0, 5)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 100)
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBlack
+    closeBtn.TextSize = 12
+    closeBtn.TextColor3 = Color3.new(1,1,1)
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        promptGui:Destroy()
+    end)
+    
+    confirmBtn.MouseButton1Click:Connect(function()
+        local id = tonumber(idBox.Text)
+        local cashStr = cashBox.Text
+        if id then
+            pcall(function()
+                local info = MarketplaceService:GetProductInfo(id, Enum.InfoType.GamePass)
+                if info then
+                    local newPreset = {
+                        Name = info.Name,
+                        Image = "rbxassetid://"..info.IconImageAssetId,
+                        Cash = cashStr,
+                        Title = "[🎁] " .. info.Name
+                    }
+                    table.insert(presets, newPreset)
+                    createPresetButton(newPreset)
+                    
+                    local savedPresets = {}
+                    pcall(function()
+                        if readfile and isfile("t17ed_custom_presets.txt") then
+                            savedPresets = HttpService:JSONDecode(readfile("t17ed_custom_presets.txt"))
+                        end
+                    end)
+                    table.insert(savedPresets, newPreset)
+                    if writefile then
+                        writefile("t17ed_custom_presets.txt", HttpService:JSONEncode(savedPresets))
+                    end
+                    
+                    showNotification("Added preset: " .. info.Name, Color3.fromRGB(0,255,0))
+                    promptGui:Destroy()
+                end
+            end)
+        end
+    end)
 end)
 
 UIS.InputBegan:Connect(function(input,gpe)

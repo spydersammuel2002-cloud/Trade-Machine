@@ -1,9 +1,12 @@
 getgenv().Time = 0.1
 
--- New Accessories
+-- Accessories (Old Horns, New Horns, Void Crown)
 getgenv().Head = {
+    215718515,      -- Old Horn 1
+    74891470,       -- Old Horn 2
+    1744060292,     -- Old Horn 3
     76479271580913, -- Stormbreak Horns of the Tempest Skies
-    439946249       -- Black Iron King of the Night
+    439946249       -- Black Iron King of the Night (Void Crown)
 }
 
 getgenv().Torso = {
@@ -24,10 +27,13 @@ local AnimationPack = {
     swimidle = "rbxassetid://116936326516985",
 }
 
--- Accessory rotation offsets (symmetrical setup)
-local AccessoryRotations = {
-    CFrame.Angles(math.rad(8), 0, 0),  -- Horns tilt forward slightly
-    CFrame.Angles(math.rad(-5), 0, 0), -- Hat tilts backward slightly
+-- Accessory offsets (symmetrical rotations for old horns, higher position for void crown)
+local AccessoryOffsets = {
+    CFrame.Angles(0, 0, math.rad(-12)),               -- Old Horn 1 (left tilt)
+    CFrame.Angles(math.rad(8), 0, 0),                 -- Old Horn 2 (center forward tilt)
+    CFrame.Angles(0, 0, math.rad(12)),                -- Old Horn 3 (right tilt)
+    CFrame.new(),                                     -- Stormbreak Horns (default)
+    CFrame.new(0, 0.5, 0) * CFrame.Angles(math.rad(-5), 0, 0) -- Void Crown (raised 0.5 studs up, tilted back)
 }
 
 local Players = game:GetService("Players")
@@ -83,7 +89,7 @@ local function safeGetObjects(assetId)
     return nil
 end
 
-local function addAccessoryToCharacter(accessoryId, parentPart, character, rotationOffset)
+local function addAccessoryToCharacter(accessoryId, parentPart, character, offset)
     if not parentPart or not parentPart.Parent then
         return
     end
@@ -121,19 +127,19 @@ local function addAccessoryToCharacter(accessoryId, parentPart, character, rotat
         local parentAttachment = findAttachment(parentPart, attachment.Name)
 
         if parentAttachment then
-            weldParts(parentPart, handle, parentAttachment.CFrame * (rotationOffset or CFrame.new()), attachment.CFrame)
+            weldParts(parentPart, handle, parentAttachment.CFrame * (offset or CFrame.new()), attachment.CFrame)
         else
-            weldParts(parentPart, handle, (rotationOffset or CFrame.new()), attachment.CFrame)
+            weldParts(parentPart, handle, (offset or CFrame.new()), attachment.CFrame)
         end
     else
         local attachmentPoint = accessory:FindFirstChild("AttachmentPoint")
         local c1 = attachmentPoint and attachmentPoint.CFrame or CFrame.new()
 
-        local offset = parentPart.Name == "Head"
-            and CFrame.new(0, 0.5, 0) * (rotationOffset or CFrame.new())
-            or (rotationOffset or CFrame.new())
+        local baseOffset = parentPart.Name == "Head"
+            and CFrame.new(0, 0.5, 0)
+            or CFrame.new()
 
-        weldParts(parentPart, handle, offset, c1)
+        weldParts(parentPart, handle, baseOffset * (offset or CFrame.new()), c1)
     end
 
     handle.CanCollide = false
@@ -318,9 +324,9 @@ local function onCharacterAdded(character)
 
     for index, accessoryId in ipairs(getgenv().Head) do
         if accessoryId and accessoryId ~= 0 then
-            local rot = AccessoryRotations[index] or CFrame.new()
+            local offset = AccessoryOffsets[index] or CFrame.new()
             task.spawn(function()
-                addAccessoryToCharacter(accessoryId, head, character, rot)
+                addAccessoryToCharacter(accessoryId, head, character, offset)
             end)
         end
     end

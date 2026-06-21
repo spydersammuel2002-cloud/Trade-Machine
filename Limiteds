@@ -1,12 +1,11 @@
 getgenv().Time = 0.1
 
--- Accessories (Old Horns, New Horns, Void Crown)
+-- Accessories (Old Horns, New Horns)
 getgenv().Head = {
     215718515,      -- Old Horn 1
     74891470,       -- Old Horn 2
     1744060292,     -- Old Horn 3
-    76479271580913, -- Stormbreak Horns of the Tempest Skies
-    439946249       -- Black Iron King of the Night (Void Crown)
+    76479271580913  -- Stormbreak Horns of the Tempest Skies
 }
 
 getgenv().Torso = {
@@ -14,6 +13,7 @@ getgenv().Torso = {
 }
 
 getgenv().Headless = true
+getgenv().KorbloxLeg = true
 
 local AnimationPack = {
     idle1    = "rbxassetid://133806214992291",
@@ -27,13 +27,12 @@ local AnimationPack = {
     swimidle = "rbxassetid://116936326516985",
 }
 
--- Accessory offsets (increased rotations for visibility, lowered crown)
+-- Accessory offsets (increased rotations for visibility)
 local AccessoryOffsets = {
-    CFrame.Angles(math.rad(-15), 0, math.rad(-25)),               -- Old Horn 1 (more outward left tilt)
-    CFrame.Angles(math.rad(20), 0, 0),                            -- Old Horn 2 (more forward tilt)
-    CFrame.Angles(math.rad(-15), 0, math.rad(25)),                -- Old Horn 3 (more outward right tilt)
-    CFrame.Angles(math.rad(-10), 0, 0),                           -- Stormbreak Horns (tilted backward slightly to separate)
-    CFrame.new(0, -0.2, 0) * CFrame.Angles(math.rad(-20), 0, 0)   -- Void Crown (lowered 0.2 studs, increased backward tilt)
+    CFrame.Angles(math.rad(-15), 0, math.rad(-25)),  -- Old Horn 1 (more outward left tilt)
+    CFrame.Angles(math.rad(20), 0, 0),               -- Old Horn 2 (more forward tilt)
+    CFrame.Angles(math.rad(-15), 0, math.rad(25)),   -- Old Horn 3 (more outward right tilt)
+    CFrame.Angles(math.rad(-10), 0, 0)               -- Stormbreak Horns (tilted backward slightly to separate)
 }
 
 local Players = game:GetService("Players")
@@ -253,6 +252,68 @@ local function applyHeadless(character)
     end
 end
 
+local function applyKorblox(character)
+    if not getgenv().KorbloxLeg then
+        return
+    end
+
+    local rightLegR6 = character:FindFirstChild("Right Leg")
+    local rightUpperLeg = character:FindFirstChild("RightUpperLeg")
+    local rightLowerLeg = character:FindFirstChild("RightLowerLeg")
+    local rightFoot = character:FindFirstChild("RightFoot")
+
+    -- R6 SUPPORT
+    if rightLegR6 then
+        rightLegR6.Transparency = 1
+        
+        for _, v in pairs(rightLegR6:GetChildren()) do
+            if v:IsA("SpecialMesh") then
+                v:Destroy()
+            end
+        end
+
+        -- Attach the catalog accessory to the R6 leg
+        task.spawn(function()
+            addAccessoryToCharacter(139607718, rightLegR6, character, CFrame.new())
+        end)
+        return
+    end
+
+    -- R15 SUPPORT
+    if rightUpperLeg then
+        rightUpperLeg.Transparency = 1
+    end
+
+    if rightLowerLeg then
+        rightLowerLeg.Transparency = 1
+        
+        for _, v in pairs(rightLowerLeg:GetChildren()) do
+            if v:IsA("SpecialMesh") then
+                v:Destroy()
+            end
+        end
+    end
+
+    if rightFoot then
+        rightFoot.Transparency = 1
+        rightFoot.Size = Vector3.new(0.05, 0.05, 0.05)
+        
+        for _, v in pairs(rightFoot:GetChildren()) do
+            if v:IsA("SpecialMesh") then
+                v:Destroy()
+            end
+        end
+    end
+
+    -- Attach the catalog accessory to the R15 leg (uses native RightLowerLegAttachment)
+    local anchorPart = rightLowerLeg or rightUpperLeg
+    if anchorPart then
+        task.spawn(function()
+            addAccessoryToCharacter(139607718, anchorPart, character, CFrame.new())
+        end)
+    end
+end
+
 local function applyAnimations(character)
     local animate = character:FindFirstChild("Animate")
 
@@ -320,6 +381,7 @@ local function onCharacterAdded(character)
     task.wait(getgenv().Time)
 
     applyHeadless(character)
+    applyKorblox(character)
     applyAnimations(character)
 
     for index, accessoryId in ipairs(getgenv().Head) do

@@ -1,0 +1,478 @@
+getgenv().Time = 0.1
+
+getgenv().Head = {
+    215718515,
+    74891470,
+    1744060292
+}
+
+getgenv().Torso = {
+    0000000000
+}
+
+getgenv().Headless = true
+getgenv().KorbloxLeg = true
+
+local AnimationPack = {
+    idle1    = "rbxassetid://133806214992291",
+    idle2    = "rbxassetid://94970088341563",
+    walk     = "rbxassetid://707897309",
+    run      = "rbxassetid://707861613",
+    jump     = "rbxassetid://116936326516985",
+    fall     = "rbxassetid://116936326516985",
+    climb    = "rbxassetid://116936326516985",
+    swim     = "rbxassetid://116936326516985",
+    swimidle = "rbxassetid://116936326516985",
+}
+
+-- Horn rotation offsets (symmetrical: side horns tilt outward, middle tilts forward)
+local HornRotations = {
+    CFrame.Angles(0, 0, math.rad(-12)),  -- left horn tilts left
+    CFrame.Angles(math.rad(8), 0, 0),    -- middle horn tilts forward slightly
+    CFrame.Angles(0, 0, math.rad(12)),   -- right horn tilts right
+}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+local activeAccessories = {}
+local headlessConnection = nil
+local isHeadlessActive = false
+
+local function weldParts(part0, part1, c0, c1)
+    for _, child in pairs(part1:GetChildren()) do
+        if child:IsA("Weld") or child:IsA("WeldConstraint") or child.Name == "AccessoryWeld" then
+            child:Destroy()
+        end
+    end
+
+    local weld = Instance.new("Weld")
+    weld.Name = "AccessoryWeld"
+    weld.Part0 = part0
+    weld.Part1 = part1
+    weld.C0 = c0
+    weld.C1 = c1
+    weld.Parent = part0
+
+    return weld
+end
+
+local function findAttachment(rootPart, name)
+    if not rootPart then
+        return nil
+    end
+
+    for _, descendant in pairs(rootPart:GetDescendants()) do
+        if descendant:IsA("Attachment") and descendant.Name == name then
+            return descendant
+        end
+    end
+
+    return nil
+end
+
+local function safeGetObjects(assetId)
+    local success, result = pcall(function()
+        return game:GetObjects("rbxassetid://" .. tostring(assetId))
+    end)
+
+    if success and result and #result > 0 then
+        return result[1]
+    end
+
+    return nil
+end
+
+local function addAccessoryToCharacter(accessoryId, parentPart, character, rotationOffset)
+    if not parentPart or not parentPart.Parent then
+        return
+    end
+
+    local accessoryKey = tostring(accessoryId) .. "_" .. parentPart.Name
+
+    if activeAccessories[accessoryKey] then
+        activeAccessories[accessoryKey]:Destroy()
+    end
+
+    local accessory = safeGetObjects(accessoryId)
+
+    if not accessory then
+        return
+    end
+
+    accessory.Name = accessory.Name .. "_Custom"
+    accessory.Parent = workspace
+
+    local handle = accessory:FindFirstChild("Handle")
+
+    if not handle then
+        accessory:Destroy()
+        return
+    end
+
+    if not handle:IsA("BasePart") then
+        accessory:Destroy()
+        return
+    end
+
+    local attachment = handle:FindFirstChildOfClass("Attachment")
+
+    if attachment then
+        local parentAttachment = findAttachment(parentPart, attachment.Name)
+
+        if parentAttachment then
+            weldParts(parentPart, handle, parentAttachment.CFrame * (rotationOffset or CFrame.new()), attachment.CFrame)
+        else
+            weldParts(parentPart, handle, (rotationOffset or CFrame.new()), attachment.CFrame)
+        end
+    else
+        local attachmentPoint = accessory:FindFirstChild("AttachmentPoint")
+        local c1 = attachmentPoint and attachmentPoint.CFrame or CFrame.new()
+
+        local offset = parentPart.Name == "Head"
+            and CFrame.new(0, 0.5, 0) * (rotationOffset or CFrame.new())
+            or (rotationOffset or CFrame.new())
+
+        weldParts(parentPart, handle, offset, c1)
+    end
+
+    handle.CanCollide = false
+    handle.Massless = true
+
+    accessory.Parent = character
+    activeAccessories[accessoryKey] = accessory
+end
+
+local function forceHeadless(head)
+    head.Transparency = 1
+
+    for _, child in pairs(head:GetChildren()) do
+        if child:IsA("Decal") or child.Name == "face" then
+            child.Transparency = 1
+        end
+    end
+
+    local headMesh =
+        head:FindFirstChildOfClass("SpecialMesh")
+        or head:FindFirstChild("Mesh")
+
+    if headMesh then
+        headMesh.Scale = Vector3.new(0.001, 0.001, 0.001)
+    end
+end
+
+local function showHead(head)
+    head.Transparency = 0
+
+    for _, child in pairs(head:GetChildren()) do
+        if child:IsA("Decal") or child.Name == "face" then
+            child.Transparency = 0
+        end
+    end
+
+    local headMesh =
+        head:FindFirstChildOfClass("SpecialMesh")
+        or head:FindFirstChild("Mesh")
+
+    if headMesh then
+        headMesh.Scale = Vector3.new(1, 1, 1)
+    end
+end
+
+local function removeHeadlessAccessory(character)
+    for key, accessory in pairs(activeAccessories) do
+        if key:find("headless") then
+            if accessory and accessory.Parent then
+                accessory:Destroy()
+            end
+
+            activeAccessories[key] = nil
+        end
+    end
+end
+
+local function applyHeadless(character)
+    if headlessConnection then
+        headlessConnection:Disconnect()
+        headlessConnection = nil
+    end
+
+    local head = character:WaitForChild("Head", 3)
+
+    if not head then
+        return
+    end
+
+    if getgenv().Headless == true then
+        isHeadlessActive = true
+
+        forceHeadless(head)
+
+        local headAccessory = safeGetObjects(134082579)
+
+        if headAccessory then
+            headAccessory.Name = "HeadlessHead"
+
+            local handle = headAccessory:FindFirstChild("Handle")
+
+            if handle then
+                handle.CanCollide = false
+                handle.Transparency = 1
+                handle.Size = Vector3.new(0.001, 0.001, 0.001)
+
+                weldParts(head, handle, CFrame.new(), CFrame.new())
+
+                headAccessory.Parent = character
+                activeAccessories["headless_" .. character.Name] = headAccessory
+            else
+                headAccessory:Destroy()
+            end
+        end
+
+        headlessConnection = RunService.Heartbeat:Connect(function()
+            if not isHeadlessActive then
+                return
+            end
+
+            if character and character.Parent and head and head.Parent then
+                if head.Transparency ~= 1 then
+                    forceHeadless(head)
+                end
+            end
+        end)
+    else
+        isHeadlessActive = false
+        showHead(head)
+        removeHeadlessAccessory(character)
+    end
+end
+
+-- KORBLOX WITH ACTUAL MESH
+local function applyKorblox(character)
+    if not getgenv().KorbloxLeg then
+        return
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoid then
+        return
+    end
+
+    local rightLowerLeg = character:FindFirstChild("RightLowerLeg")
+    local rightUpperLeg = character:FindFirstChild("RightUpperLeg")
+    local rightFoot = character:FindFirstChild("RightFoot")
+    local rightLegR6 = character:FindFirstChild("Right Leg")
+
+    -- Remove existing korblox part if any
+    local existingKorblox = character:FindFirstChild("KorbloxMeshPart")
+    if existingKorblox then
+        existingKorblox:Destroy()
+    end
+
+    -- R6 SUPPORT
+    if rightLegR6 then
+        rightLegR6.Transparency = 1
+
+        -- remove default mesh
+        for _, v in pairs(rightLegR6:GetChildren()) do
+            if v:IsA("SpecialMesh") then
+                v:Destroy()
+            end
+        end
+
+        -- create korblox mesh part
+        local korbloxPart = Instance.new("Part")
+        korbloxPart.Name = "KorbloxMeshPart"
+        korbloxPart.Size = Vector3.new(1, 2, 1)
+        korbloxPart.CanCollide = false
+        korbloxPart.Massless = true
+        korbloxPart.Anchored = false
+        korbloxPart.Transparency = 0
+        korbloxPart.Color = Color3.fromRGB(45, 45, 55)
+        korbloxPart.Material = Enum.Material.Metal
+        korbloxPart.Parent = character
+
+        local mesh = Instance.new("SpecialMesh")
+        mesh.MeshId = "rbxasset://139607718"
+        mesh.TextureId = ""
+        mesh.Scale = Vector3.new(1, 1, 1)
+        mesh.Parent = korbloxPart
+
+        weldParts(rightLegR6, korbloxPart, CFrame.new(0, 0, 0), CFrame.new(0, 0, 0))
+
+        activeAccessories["korblox_" .. character.Name] = korbloxPart
+        return
+    end
+
+    -- R15 SUPPORT
+    if rightUpperLeg then
+        rightUpperLeg.Transparency = 1
+    end
+
+    if rightLowerLeg then
+        rightLowerLeg.Transparency = 1
+
+        -- remove existing mesh
+        for _, v in pairs(rightLowerLeg:GetChildren()) do
+            if v:IsA("SpecialMesh") then
+                v:Destroy()
+            end
+        end
+    end
+
+    if rightFoot then
+        rightFoot.Transparency = 1
+
+        for _, v in pairs(rightFoot:GetChildren()) do
+            if v:IsA("SpecialMesh") then
+                v:Destroy()
+            end
+        end
+    end
+
+    -- create korblox mesh part anchored to right lower leg
+    local anchorPart = rightLowerLeg or rightUpperLeg
+
+    if anchorPart then
+        local korbloxPart = Instance.new("Part")
+        korbloxPart.Name = "KorbloxMeshPart"
+        korbloxPart.Size = Vector3.new(1, 3, 1)
+        korbloxPart.CanCollide = false
+        korbloxPart.Massless = true
+        korbloxPart.Anchored = false
+        korbloxPart.Transparency = 0
+        korbloxPart.Color = Color3.fromRGB(45, 45, 55)
+        korbloxPart.Material = Enum.Material.Metal
+        korbloxPart.Parent = character
+
+        local mesh = Instance.new("SpecialMesh")
+        mesh.MeshId = "rbxasset://139607718"
+        mesh.TextureId = ""
+        mesh.Scale = Vector3.new(1, 1, 1)
+        mesh.Parent = korbloxPart
+
+        -- offset so the mesh aligns with the leg
+        local weldC0 = CFrame.new(0, -0.5, 0)
+        if rightLowerLeg then
+            weldC0 = CFrame.new(0, 0, 0)
+        end
+
+        weldParts(anchorPart, korbloxPart, weldC0, CFrame.new(0, 0, 0))
+
+        activeAccessories["korblox_" .. character.Name] = korbloxPart
+    end
+end
+
+local function applyAnimations(character)
+    local animate = character:FindFirstChild("Animate")
+
+    if not animate then
+        return
+    end
+
+    local function setAnimation(folderName, animationId, animationNumber)
+        local folder = animate:FindFirstChild(folderName)
+
+        if folder then
+            local anim
+
+            if animationNumber then
+                anim = folder:FindFirstChild("Animation" .. tostring(animationNumber))
+            else
+                anim = folder:FindFirstChildWhichIsA("Animation")
+            end
+
+            if anim then
+                anim.AnimationId = animationId
+            end
+        end
+    end
+
+    setAnimation("idle", AnimationPack.idle1, 1)
+    setAnimation("idle", AnimationPack.idle2, 2)
+
+    setAnimation("walk", AnimationPack.walk)
+    setAnimation("run", AnimationPack.run)
+    setAnimation("jump", AnimationPack.jump)
+    setAnimation("fall", AnimationPack.fall)
+    setAnimation("climb", AnimationPack.climb)
+    setAnimation("swim", AnimationPack.swim)
+    setAnimation("swimidle", AnimationPack.swimidle)
+end
+
+local function onCharacterAdded(character)
+    activeAccessories = {}
+
+    if headlessConnection then
+        headlessConnection:Disconnect()
+        headlessConnection = nil
+    end
+
+    local head, torso
+    local waited = 0
+    local maxWait = 5
+
+    repeat
+        task.wait(0.05)
+
+        waited += 0.05
+
+        head = character:FindFirstChild("Head")
+        torso = character:FindFirstChild("UpperTorso")
+            or character:FindFirstChild("Torso")
+
+    until (head and torso) or waited >= maxWait
+
+    if not head then
+        return
+    end
+
+    task.wait(getgenv().Time)
+
+    applyHeadless(character)
+    applyKorblox(character)
+    applyAnimations(character)
+
+    for index, accessoryId in ipairs(getgenv().Head) do
+        if accessoryId and accessoryId ~= 0 then
+            local rot = HornRotations[index] or CFrame.new()
+            task.spawn(function()
+                addAccessoryToCharacter(accessoryId, head, character, rot)
+            end)
+        end
+    end
+
+    for _, accessoryId in ipairs(getgenv().Torso) do
+        if accessoryId and accessoryId ~= 0 then
+            task.spawn(function()
+                addAccessoryToCharacter(accessoryId, torso, character)
+            end)
+        end
+    end
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+if player.Character then
+    task.spawn(function()
+        onCharacterAdded(player.Character)
+    end)
+end
+
+player.CharacterRemoving:Connect(function()
+    if headlessConnection then
+        headlessConnection:Disconnect()
+        headlessConnection = nil
+    end
+
+    for key, accessory in pairs(activeAccessories) do
+        if accessory and accessory.Parent then
+            accessory:Destroy()
+        end
+    end
+
+    activeAccessories = {}
+end)
